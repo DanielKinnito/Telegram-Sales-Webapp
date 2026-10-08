@@ -1,0 +1,27 @@
+{
+  "name": "telegram-sales-webapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "test": "npm --prefix backend test",
+    "test:manual": "npm --prefix backend run test:manual",
+    "cron:sweep": "npm --prefix backend run cron:sweep",
+    "cron:seed": "npm --prefix backend run cron:seed",
+    "typecheck": "npm --prefix backend run typecheck",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3"
+  }
+}

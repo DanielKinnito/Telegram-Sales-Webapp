@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", system-ui, sans-serif;
+    color-scheme: light;
+  }
+
+  :root.dark, body.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--font-apple);
+    background-color: #f5f5f7;
+    color: #1d1d1f;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  body.dark {
+    background-color: #000000;
+    color: #f5f5f7;
+  }
+}
+
+/* Apple Fluid Tactile Press State */
+.apple-press {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+}
+.apple-press:active {
+  transform: scale(0.975);
+  opacity: 0.88;
+}
+
+/* Translucent Glass Header & Floating Chrome */
+.apple-glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .apple-glass {
+  background: rgba(26, 26, 28, 0.78);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Apple Card Surface Layer */
+.apple-glass-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.02);
+}
+
+.dark .apple-glass-card {
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Apple Inset Surface */
+.apple-inset {
+  background: #fbfbfd;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.dark .apple-inset {
+  background: #2c2c2e;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Apple Segmented Bar */
+.apple-segmented {
+  background: rgba(118, 118, 128, 0.12);
+  padding: 3px;
+  border-radius: 9999px;
+}
+
+.dark .apple-segmented {
+  background: rgba(118, 118, 128, 0.28);
+}
+
+/* Scrollbar refinement */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
