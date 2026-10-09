@@ -311,15 +311,24 @@ export class DealsService {
 
     if (isAccountPage) {
       // The page ID came from Accounts DB!
-      // Check if a Deal already exists in Deals DB linked to this Account
+      // Check if a Deal already exists in Deals DB for this Account Name or Deal Title
+      const cleanCompanyName = dealTitle.replace(/ Order$/, "");
+      const expectedDealTitle = `${cleanCompanyName} Order`;
+
       let linkedDealsRes: { results?: any[] } = {};
       try {
         linkedDealsRes = (await this.notionClient.queryDatabase(this.dealsDbId, {
           filter: {
-            property: "Account",
-            relation: {
-              contains: input.dealId,
-            },
+            or: [
+              {
+                property: "Account Name",
+                rich_text: { equals: cleanCompanyName },
+              },
+              {
+                property: "Deal Title",
+                title: { equals: expectedDealTitle },
+              },
+            ],
           },
         })) || {};
       } catch {
@@ -351,10 +360,10 @@ export class DealsService {
         });
       } else {
         // Create a new Deal record in Deals DB linked to this Account
-        const repRelation = targetPage.properties?.["Owner"]?.relation?.[0]?.id;
+        const repName = input.submittedByName || "Sales Representative";
         const dealProps: Record<string, any> = {
           "Deal Title": {
-            title: [{ text: { content: dealTitle.endsWith("Order") ? dealTitle : `${dealTitle} Order` } }],
+            title: [{ text: { content: expectedDealTitle } }],
           },
           "Stage": {
             select: { name: "Payment Pending Verification" },
@@ -365,16 +374,13 @@ export class DealsService {
           "Payment Proof URL": {
             url: input.proofUrl.trim(),
           },
-          "Account": {
-            relation: [{ id: input.dealId }],
+          "Account Name": {
+            rich_text: [{ text: { content: cleanCompanyName } }],
+          },
+          "Rep Name": {
+            rich_text: [{ text: { content: repName } }],
           },
         };
-
-        if (repRelation) {
-          dealProps["Assigned Rep"] = {
-            relation: [{ id: repRelation }],
-          };
-        }
 
         const newDealPage = await this.notionClient.createPage({
           parent: { database_id: this.dealsDbId },
