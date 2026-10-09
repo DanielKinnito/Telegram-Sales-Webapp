@@ -140,7 +140,7 @@ export const FrontDeskView: React.FC = () => {
             required
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="e.g. Sheger Construction Materials"
+            placeholder="Enter company name"
             className="w-full h-11 px-3.5 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] focus:bg-white dark:focus:bg-zinc-900 transition-colors"
           />
         </div>
@@ -163,7 +163,7 @@ export const FrontDeskView: React.FC = () => {
             required
             value={tin}
             onChange={(e) => handleTinChange(e.target.value)}
-            placeholder="0012345678"
+            placeholder="Enter 10-digit TIN"
             className="w-full h-11 px-3.5 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] font-mono tracking-wider focus:outline-none focus:border-[#0071e3] focus:bg-white dark:focus:bg-zinc-900 transition-colors"
           />
         </div>
@@ -193,7 +193,7 @@ export const FrontDeskView: React.FC = () => {
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="e.g. Megenagna Square, Addis Ababa"
+            placeholder="Enter company address"
             className="w-full h-11 px-3.5 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] focus:bg-white dark:focus:bg-zinc-900 transition-colors"
           />
         </div>
@@ -206,7 +206,7 @@ export const FrontDeskView: React.FC = () => {
               type="text"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
-              placeholder="e.g. Dawit Tadesse"
+              placeholder="Enter contact full name"
               className="w-full h-10 px-3 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-colors"
             />
           </div>
@@ -216,7 +216,7 @@ export const FrontDeskView: React.FC = () => {
               type="tel"
               value={contactPhone}
               onChange={(e) => setContactPhone(e.target.value)}
-              placeholder="+251 9..."
+              placeholder="+251 900 000 000"
               className="w-full h-10 px-3 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-colors"
             />
           </div>

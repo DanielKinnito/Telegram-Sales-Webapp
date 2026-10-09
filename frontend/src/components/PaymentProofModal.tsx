@@ -151,7 +151,7 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
                 setProofUrl(e.target.value);
                 setErrorMessage(null);
               }}
-              placeholder="https://cbe.et/... or https://telebirr.et/receipt/..."
+              placeholder="https://... (Paste official transaction link)"
               className="w-full h-11 px-3.5 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] font-mono text-xs focus:outline-none focus:border-[#0071e3] focus:bg-white dark:focus:bg-zinc-900 transition-colors shadow-inner"
             />
           </div>
@@ -165,7 +165,7 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
               type="text"
               value={depositRef}
               onChange={(e) => setDepositRef(e.target.value)}
-              placeholder="e.g. CBE FT2610234812 or Telebirr Transferred"
+              placeholder="Enter bank name or deposit reference number"
               className="w-full h-10 px-3.5 rounded-xl bg-[#fbfbfd] dark:bg-zinc-900 border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-white placeholder-[#86868b] text-xs focus:outline-none focus:border-[#0071e3] focus:bg-white dark:focus:bg-zinc-900 transition-colors"
             />
           </div>

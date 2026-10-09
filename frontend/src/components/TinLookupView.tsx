@@ -130,7 +130,7 @@ export const TinLookupView: React.FC = () => {
               maxLength={10}
               value={tin}
               onChange={(e) => handleTinChange(e.target.value)}
-              placeholder="e.g. 0012345678"
+              placeholder="Enter 10-digit TIN"
               className="w-full h-12 pl-4 pr-14 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-base font-mono tracking-widest focus:outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20 transition-all"
             />
             <div className="absolute right-3.5 top-3.5 text-[#86868b] font-mono text-xs">
@@ -260,7 +260,7 @@ export const TinLookupView: React.FC = () => {
                 required
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="e.g. Awash Agro Industrial PLC"
+                placeholder="Enter registered company name"
                 className="w-full h-11 px-3.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
               />
             </div>
@@ -281,7 +281,7 @@ export const TinLookupView: React.FC = () => {
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. Bole Subcity, Woreda 03, Addis Ababa"
+                placeholder="Enter office, building, or city address"
                 className="w-full h-11 px-3.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
               />
             </div>
