@@ -20,6 +20,11 @@ export function App() {
   useEffect(() => {
     expandTelegramViewport();
     setUser(getTelegramUser());
+
+    const timer = setTimeout(() => {
+      setUser(getTelegramUser());
+    }, 150);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

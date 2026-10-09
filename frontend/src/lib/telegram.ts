@@ -14,28 +14,133 @@ export interface TelegramUser {
   username?: string | undefined;
 }
 
-export function getTelegramInitData(): string {
-  if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initData) {
-    const raw = (window as any).Telegram.WebApp.initData;
-    if (raw && raw.length > 10) return raw;
+function isLocalDev(): boolean {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.');
+}
+
+/**
+ * Extracts and parses tgWebAppData directly from URL hash or query params
+ * Handles edge cases where window.Telegram.WebApp script takes a frame to bind.
+ */
+function extractUrlTelegramData(): { initData: string; user: TelegramUser | null } {
+  if (typeof window === 'undefined') return { initData: '', user: null };
+
+  let raw = '';
+  // Check location hash first (#tgWebAppData=...)
+  if (window.location.hash) {
+    const hash = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const params = new URLSearchParams(hash);
+    raw = params.get('tgWebAppData') || '';
   }
-  return DEV_FALLBACK_INIT_DATA;
+
+  // Check search query (?tgWebAppData=...)
+  if (!raw && window.location.search) {
+    const params = new URLSearchParams(window.location.search);
+    raw = params.get('tgWebAppData') || '';
+  }
+
+  if (!raw) return { initData: '', user: null };
+
+  try {
+    const dataParams = new URLSearchParams(raw);
+    const userJson = dataParams.get('user');
+    if (userJson) {
+      const u = JSON.parse(decodeURIComponent(userJson));
+      return {
+        initData: raw,
+        user: {
+          id: u.id,
+          firstName: u.first_name || 'Staff',
+          lastName: u.last_name || undefined,
+          username: u.username || undefined,
+        },
+      };
+    }
+  } catch {
+    // Ignore parse error
+  }
+
+  return { initData: raw, user: null };
+}
+
+export function getTelegramInitData(): string {
+  if (typeof window !== 'undefined') {
+    // 1. Check official Telegram WebApp SDK
+    const sdkRaw = (window as any).Telegram?.WebApp?.initData;
+    if (sdkRaw && sdkRaw.length > 10) return sdkRaw;
+
+    // 2. Check URL parameters fallback
+    const { initData } = extractUrlTelegramData();
+    if (initData && initData.length > 10) return initData;
+
+    // 3. Check sessionStorage cache
+    const cached = sessionStorage.getItem('tg_init_data');
+    if (cached && cached.length > 10) return cached;
+  }
+
+  // Only use Tester One mock in local dev environment
+  if (isLocalDev()) {
+    return DEV_FALLBACK_INIT_DATA;
+  }
+
+  return '';
 }
 
 export function getTelegramUser(): TelegramUser {
-  if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
-    const u = (window as any).Telegram.WebApp.initDataUnsafe.user;
+  if (typeof window !== 'undefined') {
+    // 1. Check official Telegram WebApp SDK
+    const u = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+    if (u && u.id) {
+      const userObj: TelegramUser = {
+        id: u.id,
+        firstName: u.first_name || 'Staff',
+        lastName: u.last_name || undefined,
+        username: u.username || undefined,
+      };
+      try {
+        sessionStorage.setItem('tg_user', JSON.stringify(userObj));
+      } catch {}
+      return userObj;
+    }
+
+    // 2. Check URL parameters
+    const { user: parsedUser, initData } = extractUrlTelegramData();
+    if (parsedUser && parsedUser.id) {
+      try {
+        sessionStorage.setItem('tg_user', JSON.stringify(parsedUser));
+        if (initData) sessionStorage.setItem('tg_init_data', initData);
+      } catch {}
+      return parsedUser;
+    }
+
+    // 3. Check sessionStorage
+    try {
+      const cached = sessionStorage.getItem('tg_user');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Fallback: only mock Tester One when running on local machine
+  if (isLocalDev()) {
     return {
-      id: u.id,
-      firstName: u.first_name || 'Staff',
-      lastName: u.last_name || undefined,
-      username: u.username || undefined,
+      id: 6191728928,
+      firstName: 'Tester',
+      lastName: 'One',
     };
   }
+
   return {
-    id: 6191728928,
-    firstName: 'Tester',
-    lastName: 'One',
+    id: 0,
+    firstName: 'Sales',
+    lastName: 'Representative',
   };
 }
 
