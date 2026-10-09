@@ -15,20 +15,19 @@ async function setupBotProfile() {
 
   try {
     // 1. Set Short Description (Bio shown on bot profile)
-    await bot.api.setMyShortDescription({
-      short_description: "B2B Sales CRM & Lead Intake Portal.",
-    });
-    console.log("✅ Set Short Description: 'B2B Sales CRM & Lead Intake Portal.'");
+    await bot.api.setMyShortDescription("Internal B2B Sales Operations & CRM Portal");
+    console.log("✅ Set Short Description");
 
     // 2. Set Full Description (Shown before pressing Start)
-    await bot.api.setMyDescription({
-      description:
-        "Official internal sales operations portal for sales representatives and reception desk.\n\n" +
-        "• Check Ethiopian TIN numbers for conflicts\n" +
-        "• Register client companies into sales pipelines\n" +
-        "• Verify payment references via Verify.ET / bank receipts\n" +
-        "• Automated walk-in lead allocation & manager notifications",
-    });
+    await bot.api.setMyDescription(
+      "Welcome to the internal Sales CRM Portal!\n\n" +
+      "Use this bot to:\n" +
+      "• Register your sales team account\n" +
+      "• Check Ethiopian TIN numbers for client conflicts\n" +
+      "• Manage your active deals and pipelines\n" +
+      "• Submit bank payment confirmation links\n\n" +
+      "Tap 'Start' below to begin."
+    );
     console.log("✅ Set Full Description");
 
     // 3. Set Bot Commands

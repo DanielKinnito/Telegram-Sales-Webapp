@@ -69,7 +69,37 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
     }
   });
 
-  // 2. Get single deal details
+  // 2. List deals for current authenticated user
+  router.get("/", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (!salesRepsService) {
+        const deals = await dealsService.listAllDeals();
+        return res.status(200).json({ success: true, deals });
+      }
+
+      const rep = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
+      if (!rep || rep.status !== "Active") {
+        return res.status(403).json({ error: "Forbidden: Not an active sales team member" });
+      }
+
+      if (rep.role === "Manager") {
+        const deals = await dealsService.listAllDeals();
+        return res.status(200).json({ success: true, deals });
+      }
+
+      const deals = await dealsService.listDealsForRep(rep.pageId);
+      return res.status(200).json({ success: true, deals });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+  });
+
+  // 3. Get single deal details
   router.get("/:id", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;

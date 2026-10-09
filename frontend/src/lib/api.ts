@@ -1,4 +1,4 @@
-import { getTelegramInitData } from './telegram';
+import { getTelegramInitData, type TelegramUser } from './telegram';
 
 export interface CheckTinResponse {
   available: boolean;
@@ -145,4 +145,24 @@ export const api = {
   getDeal: async (dealId: string): Promise<{ success: boolean; deal: DealItem }> => {
     return request<{ success: boolean; deal: DealItem }>(`/api/deals/${dealId}`);
   },
+
+  getDeals: async (): Promise<{ success: boolean; deals: DealItem[] }> => {
+    return request<{ success: boolean; deals: DealItem[] }>('/api/deals');
+  },
+
+  getMe: async (): Promise<AuthMeResponse> => {
+    return request<AuthMeResponse>('/api/auth/me');
+  },
 };
+
+export interface AuthMeResponse {
+  success: boolean;
+  user: TelegramUser;
+  rep?: {
+    pageId: string;
+    fullName: string;
+    role: 'Sales Rep' | 'Front Desk' | 'Manager';
+    status: 'Active' | 'Pending Approval' | 'Inactive';
+    phone?: string;
+  } | null;
+}

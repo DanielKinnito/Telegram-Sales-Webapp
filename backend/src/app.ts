@@ -44,17 +44,31 @@ export function createApp(options: AppOptions = {}) {
     });
   });
 
-  // Protected endpoint verifying Telegram Mini App caller identity
-  app.get("/api/auth/me", verifyTelegramAuth, (req: AuthenticatedRequest, res) => {
-    res.json({
-      success: true,
-      user: req.telegramUser,
-    });
-  });
-
   const salesRepsService =
     options.salesRepsService ||
     new SalesRepsService(getNotionClient(), env.NOTION_SALES_REPS_DB_ID);
+
+  // Protected endpoint verifying Telegram Mini App caller identity and CRM profile
+  app.get("/api/auth/me", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const rep = await salesRepsService.findSalesRepByTelegramId(req.telegramUser.id);
+      res.json({
+        success: true,
+        user: req.telegramUser,
+        rep: rep
+          ? {
+              pageId: rep.pageId,
+              fullName: rep.fullName,
+              role: rep.role,
+              status: rep.status,
+              phone: rep.phone,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   // Leads & Accounts management routes
   const leadsService =

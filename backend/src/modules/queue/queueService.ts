@@ -73,12 +73,59 @@ export class QueueService {
   }
 
   /**
+   * Syncs the Rotational Queue with all Active Sales Reps in Notion.
+   * Ensures any rep newly approved by management is immediately enrolled
+   * in the round-robin distribution with Priority 1 (null timestamp).
+   */
+  public async syncQueueWithActiveSalesReps(): Promise<void> {
+    try {
+      if (typeof this.salesRepsService?.getActiveSalesReps !== "function") return;
+      const activeReps = await this.salesRepsService.getActiveSalesReps();
+      const salesRepsOnly = activeReps.filter((r) => r.role === "Sales Rep");
+
+      const queueResponse = (await this.notionClient.queryDatabase(this.queueDbId)) as { results: any[] };
+      const existingTids = new Set(
+        (queueResponse.results || []).map(
+          (p: any) =>
+            p.properties?.["Rep ID"]?.title?.[0]?.plain_text ||
+            p.properties?.["Rep ID"]?.rich_text?.[0]?.plain_text ||
+            ""
+        )
+      );
+
+      for (const rep of salesRepsOnly) {
+        if (!existingTids.has(rep.telegramId)) {
+          await this.notionClient.createPage({
+            parent: { database_id: this.queueDbId },
+            properties: {
+              "Rep ID": {
+                title: [{ text: { content: rep.telegramId } }],
+              },
+              "Availability Status": {
+                select: { name: "Available" },
+              },
+              "Order Position": {
+                number: existingTids.size + 1,
+              },
+            },
+          });
+          existingTids.add(rep.telegramId);
+        }
+      }
+    } catch (err: any) {
+      console.warn("Could not sync queue with active sales reps:", err.message);
+    }
+  }
+
+  /**
    * Selects the next available sales rep based on round-robin fairness.
    * Priority:
    * 1. Reps who have never been assigned (timestamp is null/undefined)
    * 2. Reps with the oldest Last Assigned Timestamp
    */
   public async getNextAvailableRep(): Promise<AvailableRep> {
+    await this.syncQueueWithActiveSalesReps();
+
     const response = (await this.notionClient.queryDatabase(this.queueDbId, {
       filter: {
         property: "Availability Status",

@@ -56,6 +56,116 @@ export class DealsService {
   }
 
   /**
+   * Retrieves all Deals assigned to a specific Sales Rep in Notion.
+   * Also includes any Accounts created by this rep.
+   */
+  public async listDealsForRep(repPageId: string): Promise<DealRecord[]> {
+    const deals: DealRecord[] = [];
+
+    try {
+      // 1. Query Deals DB
+      const response = (await this.notionClient.queryDatabase(this.dealsDbId, {
+        filter: {
+          property: "Assigned Rep",
+          relation: {
+            contains: repPageId,
+          },
+        },
+      })) as { results: any[] };
+
+      for (const page of response.results || []) {
+        const props = page.properties;
+        const title =
+          props?.["Deal Title"]?.title?.[0]?.plain_text ||
+          props?.["Name"]?.title?.[0]?.plain_text ||
+          "Untitled Deal";
+        const stage = props?.["Stage"]?.select?.name || "New";
+        const amount = props?.["Amount"]?.number ?? null;
+        const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
+        const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
+
+        deals.push({
+          pageId: page.id,
+          title,
+          stage,
+          amount,
+          depositRef,
+          proofUrl,
+        });
+      }
+    } catch (err: any) {
+      console.warn("Could not query Deals DB for rep:", err.message);
+    }
+
+    try {
+      // 2. Query Accounts DB owned by this rep
+      const accountsResponse = (await this.notionClient.queryDatabase(env.NOTION_ACCOUNTS_DB_ID, {
+        filter: {
+          property: "Owner",
+          relation: {
+            contains: repPageId,
+          },
+        },
+      })) as { results: any[] };
+
+      for (const page of accountsResponse.results || []) {
+        const props = page.properties;
+        const companyName =
+          props?.["Name"]?.title?.[0]?.plain_text ||
+          props?.["Company Name"]?.title?.[0]?.plain_text ||
+          "Client Account";
+
+        const alreadyHasDeal = deals.some((d) => d.title.includes(companyName));
+        if (!alreadyHasDeal) {
+          deals.push({
+            pageId: page.id,
+            title: `${companyName} Order`,
+            stage: "Proposal",
+            amount: null,
+            depositRef: null,
+            proofUrl: null,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn("Could not query Accounts DB for rep:", err.message);
+    }
+
+    return deals;
+  }
+
+  /**
+   * Retrieves all Deals across the entire organization (for managers).
+   */
+  public async listAllDeals(): Promise<DealRecord[]> {
+    const response = (await this.notionClient.queryDatabase(this.dealsDbId)) as { results: any[] };
+    const deals: DealRecord[] = [];
+
+    for (const page of response.results || []) {
+      const props = page.properties;
+      const title =
+        props?.["Deal Title"]?.title?.[0]?.plain_text ||
+        props?.["Name"]?.title?.[0]?.plain_text ||
+        "Untitled Deal";
+      const stage = props?.["Stage"]?.select?.name || "New";
+      const amount = props?.["Amount"]?.number ?? null;
+      const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
+      const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
+
+      deals.push({
+        pageId: page.id,
+        title,
+        stage,
+        amount,
+        depositRef,
+        proofUrl,
+      });
+    }
+
+    return deals;
+  }
+
+  /**
    * Retrieves a Deal record from Notion by page ID.
    */
   public async getDeal(pageId: string): Promise<DealRecord> {

@@ -1,37 +1,31 @@
-import { useState } from 'react';
-import { FileCheck, CheckCircle2, ShieldCheck, ExternalLink, ArrowRight } from 'lucide-react';
-import type { DealItem } from '../lib/api';
+import { useState, useEffect } from 'react';
+import { FileCheck, CheckCircle2, ShieldCheck, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
+import { api, type DealItem } from '../lib/api';
 import { PaymentProofModal } from './PaymentProofModal';
 import { triggerHaptic } from '../lib/telegram';
 
-const INITIAL_DEALS: DealItem[] = [
-  {
-    pageId: 'deal-001',
-    title: 'Awash Logistics Fleet Lubricants Order',
-    stage: 'Proposal',
-    amount: 350000,
-  },
-  {
-    pageId: 'deal-002',
-    title: 'Sheger Solar Industrial Inverters',
-    stage: 'Payment Pending Verification',
-    amount: 480000,
-    depositRef: 'CBE: FT2610234812',
-    proofUrl: 'https://cbe.et/receipt/FT2610234812',
-  },
-  {
-    pageId: 'deal-003',
-    title: 'Entoto Highlands Packaging Machinery',
-    stage: 'New',
-    amount: 185000,
-  },
-];
-
 export const DealsView: React.FC = () => {
-  const [deals, setDeals] = useState<DealItem[]>(INITIAL_DEALS);
+  const [deals, setDeals] = useState<DealItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeStageFilter, setActiveStageFilter] = useState<string>('All');
   const [selectedDealForProof, setSelectedDealForProof] = useState<DealItem | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsLoading(true);
+    api.getDeals()
+      .then((res) => {
+        if (res.deals) {
+          setDeals(res.deals);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load deals:', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
 
   const filterStages = ['All', 'Proposal', 'Payment Pending Verification', 'Won', 'New'];
 
@@ -110,9 +104,21 @@ export const DealsView: React.FC = () => {
 
       {/* Deal Pipeline Cards */}
       <div className="space-y-3">
-        {filteredDeals.length === 0 ? (
-          <div className="p-8 text-center text-[#86868b] text-xs apple-glass-card rounded-2xl">
-            No deals found matching filter "{activeStageFilter}".
+        {isLoading ? (
+          <div className="p-12 text-center text-[#86868b] text-xs apple-glass-card rounded-2xl flex flex-col items-center justify-center space-y-2">
+            <Loader2 className="w-5 h-5 animate-spin text-[#0071e3]" />
+            <span>Loading pipeline deals from Notion CRM...</span>
+          </div>
+        ) : filteredDeals.length === 0 ? (
+          <div className="p-8 text-center text-[#86868b] text-xs apple-glass-card rounded-2xl space-y-2">
+            <p className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+              {deals.length === 0 ? 'No pipeline deals registered yet.' : `No deals found matching filter "${activeStageFilter}".`}
+            </p>
+            <p className="text-[11px] text-[#6e6e73] dark:text-[#a1a1a6]">
+              {deals.length === 0
+                ? 'Verify a 10-digit TIN in the TIN Lookup tab to register client companies into your pipeline.'
+                : 'Try selecting a different stage filter above.'}
+            </p>
           </div>
         ) : (
           filteredDeals.map((deal) => (

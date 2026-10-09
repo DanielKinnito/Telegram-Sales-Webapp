@@ -7,6 +7,8 @@ interface HeaderProps {
   onRoleChange: (role: 'sales_rep' | 'front_desk') => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  canSwitchRole?: boolean;
+  repRoleName?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,6 +17,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRoleChange,
   theme,
   onToggleTheme,
+  canSwitchRole = false,
+  repRoleName = 'Sales Rep',
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full apple-glass px-4 py-2.5 transition-colors">
@@ -40,33 +44,40 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Controls: Role Switcher & Theme Toggle */}
+        {/* Right Controls: Role Badge or Role Switcher & Theme Toggle */}
         <div className="flex items-center space-x-2 shrink-0">
-          {/* Apple Segmented Role Switcher */}
-          <div className="apple-segmented flex items-center p-0.5">
-            <button
-              type="button"
-              onClick={() => onRoleChange('sales_rep')}
-              className={`px-3 py-1 rounded-full text-xs font-semibold apple-press transition-all ${
-                activeRole === 'sales_rep'
-                  ? 'bg-white text-[#1d1d1f] dark:bg-[#323236] dark:text-[#f5f5f7] shadow-xs'
-                  : 'text-[#6e6e73] dark:text-[#a1a1a6] hover:text-[#1d1d1f]'
-              }`}
-            >
-              Sales Rep
-            </button>
-            <button
-              type="button"
-              onClick={() => onRoleChange('front_desk')}
-              className={`px-3 py-1 rounded-full text-xs font-semibold apple-press transition-all ${
-                activeRole === 'front_desk'
-                  ? 'bg-white text-[#1d1d1f] dark:bg-[#323236] dark:text-[#f5f5f7] shadow-xs'
-                  : 'text-[#6e6e73] dark:text-[#a1a1a6] hover:text-[#1d1d1f]'
-              }`}
-            >
-              Front Desk
-            </button>
-          </div>
+          {canSwitchRole ? (
+            /* Apple Segmented Role Switcher (For Managers only) */
+            <div className="apple-segmented flex items-center p-0.5">
+              <button
+                type="button"
+                onClick={() => onRoleChange('sales_rep')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold apple-press transition-all ${
+                  activeRole === 'sales_rep'
+                    ? 'bg-white text-[#1d1d1f] dark:bg-[#323236] dark:text-[#f5f5f7] shadow-xs'
+                    : 'text-[#6e6e73] dark:text-[#a1a1a6] hover:text-[#1d1d1f]'
+                }`}
+              >
+                Sales Rep
+              </button>
+              <button
+                type="button"
+                onClick={() => onRoleChange('front_desk')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold apple-press transition-all ${
+                  activeRole === 'front_desk'
+                    ? 'bg-white text-[#1d1d1f] dark:bg-[#323236] dark:text-[#f5f5f7] shadow-xs'
+                    : 'text-[#6e6e73] dark:text-[#a1a1a6] hover:text-[#1d1d1f]'
+                }`}
+              >
+                Front Desk
+              </button>
+            </div>
+          ) : (
+            /* Locked Role Pill */
+            <div className="px-3 py-1 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/5 dark:border-white/10 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
+              {repRoleName}
+            </div>
+          )}
 
           {/* Theme Toggle Button */}
           <button

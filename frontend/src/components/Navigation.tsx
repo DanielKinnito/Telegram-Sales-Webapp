@@ -6,14 +6,21 @@ export type TabType = 'tin_lookup' | 'deals' | 'walk_in';
 interface NavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
+  activeRole?: 'sales_rep' | 'front_desk' | 'manager';
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
-  const tabs = [
-    { id: 'tin_lookup' as TabType, label: 'TIN Lookup', icon: Search },
-    { id: 'deals' as TabType, label: 'Deals & Proofs', icon: Briefcase },
-    { id: 'walk_in' as TabType, label: 'Walk-In Intake', icon: UserCheck },
+export const Navigation: React.FC<NavigationProps> = ({
+  activeTab,
+  onTabChange,
+  activeRole = 'sales_rep',
+}) => {
+  const allTabs = [
+    { id: 'tin_lookup' as TabType, label: 'TIN Lookup', icon: Search, roles: ['sales_rep', 'front_desk', 'manager'] },
+    { id: 'deals' as TabType, label: 'Deals & Proofs', icon: Briefcase, roles: ['sales_rep', 'manager'] },
+    { id: 'walk_in' as TabType, label: 'Walk-In Intake', icon: UserCheck, roles: ['front_desk', 'manager'] },
   ];
+
+  const tabs = allTabs.filter((t) => t.roles.includes(activeRole));
 
   const handleTabClick = (tabId: TabType) => {
     if (activeTab !== tabId) {
