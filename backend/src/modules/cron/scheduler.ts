@@ -48,12 +48,30 @@ export function startScheduler(options: SchedulerOptions) {
     { timezone }
   );
 
+  // 3. Periodic Call Reminder Worker (Runs every 15 minutes)
+  const reminderTask = cron.schedule(
+    "*/15 * * * *",
+    async () => {
+      try {
+        const result = await cronService.checkAndDispatchDueReminders();
+        if (result.remindersSent > 0) {
+          console.log(`📞 Call reminder check dispatched ${result.remindersSent} alerts.`);
+        }
+      } catch (err) {
+        console.error("❌ Error in Call Reminder Worker:", err);
+      }
+    },
+    { timezone }
+  );
+
   return {
     briefingTask,
     sweeperTask,
+    reminderTask,
     stop: () => {
       briefingTask.stop();
       sweeperTask.stop();
+      reminderTask.stop();
     },
   };
 }

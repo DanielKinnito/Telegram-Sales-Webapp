@@ -51,6 +51,9 @@ export function createApp(options: AppOptions = {}) {
   // Protected endpoint verifying Telegram Mini App caller identity and CRM profile
   app.get("/api/auth/me", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
+      if (!req.telegramUser) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
       const rep = await salesRepsService.findSalesRepByTelegramId(req.telegramUser.id);
       res.json({
         success: true,
@@ -93,7 +96,6 @@ export function createApp(options: AppOptions = {}) {
     });
 
   // Deals progression & payment proofs
-  const storageProvider = options.storageProvider || getStorageProvider();
   const dealsService =
     options.dealsService ||
     new DealsService({
@@ -106,7 +108,7 @@ export function createApp(options: AppOptions = {}) {
 
   app.use("/api/leads", createLeadsRouter(leadsService));
   app.use("/api/queue", createQueueRouter({ queueService, salesRepsService }));
-  app.use("/api/deals", createDealsRouter({ dealsService, salesRepsService, storageProvider }));
+  app.use("/api/deals", createDealsRouter({ dealsService, salesRepsService }));
 
   // Static files for Telegram Mini App frontend when built
   const frontendDist = path.resolve(__dirname, "../../frontend/dist");

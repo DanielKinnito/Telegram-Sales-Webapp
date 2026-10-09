@@ -22,14 +22,14 @@ export interface VerifyTransactionResult {
   provider: SupportedBankProvider;
   providerName: string;
   referenceNumber: string;
-  amount?: number;
+  amount?: number | undefined;
   currency: string;
-  senderName?: string;
-  transactionTime?: string;
-  receiptUrl?: string;
+  senderName?: string | undefined;
+  transactionTime?: string | undefined;
+  receiptUrl?: string | undefined;
   verificationBadge: string;
   message: string;
-  rawResponse?: Record<string, unknown>;
+  rawResponse?: Record<string, unknown> | undefined;
 }
 
 export const BANK_DISPLAY_NAMES: Record<SupportedBankProvider, string> = {

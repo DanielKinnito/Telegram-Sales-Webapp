@@ -14,6 +14,11 @@ export const TinLookupView: React.FC = () => {
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
   const [industry, setIndustry] = useState('Manufacturing');
+  const [contactPerson, setContactPerson] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [isCommission, setIsCommission] = useState(false);
+  const [beneficiaryName, setBeneficiaryName] = useState('');
+  const [beneficiaryPhone, setBeneficiaryPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registeredAccounts, setRegisteredAccounts] = useState<RegisterLeadResponse['account'][]>([]);
 
@@ -76,6 +81,11 @@ export const TinLookupView: React.FC = () => {
         tin,
         address: address.trim() || undefined,
         industry,
+        contactPerson: contactPerson.trim() || undefined,
+        contactPhone: contactPhone.trim() || undefined,
+        isCommission,
+        beneficiaryName: isCommission ? beneficiaryName.trim() || undefined : undefined,
+        beneficiaryPhone: isCommission ? beneficiaryPhone.trim() || undefined : undefined,
       });
 
       triggerHaptic('success');
@@ -92,6 +102,11 @@ export const TinLookupView: React.FC = () => {
       });
       setCompanyName('');
       setAddress('');
+      setContactPerson('');
+      setContactPhone('');
+      setIsCommission(false);
+      setBeneficiaryName('');
+      setBeneficiaryPhone('');
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed');
       triggerHaptic('error');
@@ -299,6 +314,111 @@ export const TinLookupView: React.FC = () => {
                 <option value="Services">Services</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+
+            {/* Optional Sales Contact Person & Phone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium">
+                  Contact Person <span className="text-[#86868b] font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={contactPerson}
+                  onChange={(e) => setContactPerson(e.target.value)}
+                  placeholder="Enter contact full name"
+                  className="w-full h-11 px-3.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium">
+                  Contact Phone <span className="text-[#86868b] font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="+251 900 000 000"
+                  className="w-full h-11 px-3.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
+                />
+              </div>
+            </div>
+
+            {/* Third-Party Commission Question */}
+            <div className="p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    Third-Party Commission Deal?
+                  </span>
+                  <span className="text-[11px] text-[#86868b]">
+                    Is this sale referred with broker or intermediary payout?
+                  </span>
+                </div>
+                <div className="flex items-center bg-black/5 dark:bg-white/10 p-0.5 rounded-lg text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCommission(false);
+                      triggerHaptic('light');
+                    }}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      !isCommission
+                        ? 'bg-white dark:bg-zinc-800 text-[#1d1d1f] dark:text-white shadow-xs font-semibold'
+                        : 'text-[#86868b]'
+                    }`}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCommission(true);
+                      triggerHaptic('light');
+                    }}
+                    className={`px-3 py-1 rounded-md transition-all ${
+                      isCommission
+                        ? 'bg-[#0071e3] text-white shadow-xs font-semibold'
+                        : 'text-[#86868b]'
+                    }`}
+                  >
+                    Yes
+                  </button>
+                </div>
+              </div>
+
+              {/* Drop down beneficiary inputs if commission based */}
+              {isCommission && (
+                <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2.5 animate-in fade-in duration-200">
+                  <div>
+                    <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium">
+                      Beneficiary Person's Name *
+                    </label>
+                    <input
+                      type="text"
+                      required={isCommission}
+                      value={beneficiaryName}
+                      onChange={(e) => setBeneficiaryName(e.target.value)}
+                      placeholder="Enter beneficiary full name"
+                      className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium">
+                      Beneficiary Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      required={isCommission}
+                      value={beneficiaryPhone}
+                      onChange={(e) => setBeneficiaryPhone(e.target.value)}
+                      placeholder="+251 900 000 000"
+                      className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

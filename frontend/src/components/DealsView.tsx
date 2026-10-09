@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FileCheck, CheckCircle2, ShieldCheck, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
+import { FileCheck, CheckCircle2, ShieldCheck, ExternalLink, ArrowRight, Loader2, Phone, Calendar, User, ChevronRight } from 'lucide-react';
 import { api, type DealItem } from '../lib/api';
 import { PaymentProofModal } from './PaymentProofModal';
+import { CompanyDetailModal } from './CompanyDetailModal';
 import { triggerHaptic } from '../lib/telegram';
 
 export const DealsView: React.FC = () => {
@@ -9,6 +10,7 @@ export const DealsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeStageFilter, setActiveStageFilter] = useState<string>('All');
   const [selectedDealForProof, setSelectedDealForProof] = useState<DealItem | null>(null);
+  const [selectedDealForDetail, setSelectedDealForDetail] = useState<DealItem | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -124,13 +126,20 @@ export const DealsView: React.FC = () => {
           filteredDeals.map((deal) => (
             <div
               key={deal.pageId}
-              className="p-4 rounded-2xl apple-glass-card space-y-3.5 transition-all"
+              onClick={() => {
+                setSelectedDealForDetail(deal);
+                triggerHaptic('light');
+              }}
+              className="p-4 rounded-2xl apple-glass-card space-y-3.5 transition-all cursor-pointer hover:border-[#0071e3]/30 apple-press"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1.5">
-                  <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
-                    {deal.title}
-                  </h3>
+                  <div className="flex items-center space-x-1.5">
+                    <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
+                      {deal.title}
+                    </h3>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#86868b]" />
+                  </div>
                   <div className="flex items-center flex-wrap gap-2">
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${getStageBadgeColor(
@@ -159,6 +168,29 @@ export const DealsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Contact Person / Quick Information if available */}
+              {(deal.contactPerson || deal.tin) && (
+                <div className="flex items-center flex-wrap gap-3 text-[11px] text-[#6e6e73] dark:text-[#a1a1a6] pt-0.5">
+                  {deal.contactPerson && (
+                    <div className="flex items-center space-x-1">
+                      <User className="w-3 h-3 text-[#0071e3]" />
+                      <span>{deal.contactPerson}</span>
+                    </div>
+                  )}
+                  {deal.contactPhone && (
+                    <div className="flex items-center space-x-1 font-mono text-[#0071e3]">
+                      <Phone className="w-3 h-3" />
+                      <span>{deal.contactPhone}</span>
+                    </div>
+                  )}
+                  {deal.tin && (
+                    <span className="font-mono text-[#86868b]">
+                      TIN: {deal.tin}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Payment Link Preview if present */}
               {deal.proofUrl && (
                 <div className="p-3 rounded-xl apple-inset flex items-center justify-between text-xs">
@@ -170,6 +202,7 @@ export const DealsView: React.FC = () => {
                     href={deal.proofUrl}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
                     className="text-[11px] text-[#0071e3] hover:underline flex items-center space-x-1 font-medium"
                   >
                     <span>Open Bank Receipt</span>
@@ -178,11 +211,16 @@ export const DealsView: React.FC = () => {
                 </div>
               )}
 
-              {/* Action Button: Attach Bank Link */}
-              <div className="pt-0.5 flex items-center justify-end">
+              {/* Action Button: Attach Bank Link & Progress Details */}
+              <div className="pt-0.5 flex items-center justify-between">
+                <span className="text-[11px] text-[#0071e3] font-medium flex items-center space-x-1">
+                  <Calendar className="w-3 h-3" />
+                  <span>Notes & Call Reminders</span>
+                </span>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setSelectedDealForProof(deal);
                     triggerHaptic('medium');
                   }}
@@ -201,6 +239,18 @@ export const DealsView: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Company Detail / Progress Notes / Call Scheduler Modal */}
+      {selectedDealForDetail && (
+        <CompanyDetailModal
+          deal={selectedDealForDetail}
+          onClose={() => setSelectedDealForDetail(null)}
+          onOpenPaymentModal={() => {
+            setSelectedDealForProof(selectedDealForDetail);
+            setSelectedDealForDetail(null);
+          }}
+        />
+      )}
 
       {/* Payment Proof Modal Dialog */}
       {selectedDealForProof && (

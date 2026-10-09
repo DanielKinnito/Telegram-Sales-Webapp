@@ -132,6 +132,82 @@ export class CronService {
   }
 
   /**
+   * Periodic Call Reminder Dispatcher.
+   * Checks for scheduled calls where Activity Date <= today and Reminder Sent is false.
+   */
+  public async checkAndDispatchDueReminders(): Promise<{ remindersSent: number }> {
+    if (!this.bot) return { remindersSent: 0 };
+    const today = new Date().toISOString().split("T")[0]!;
+
+    try {
+      const response = (await this.notionClient.queryDatabase(this.salesLogsDbId, {
+        filter: {
+          and: [
+            {
+              property: "Interaction Type",
+              select: { equals: "Call" },
+            },
+            {
+              property: "Activity Date",
+              date: { on_or_before: today },
+            },
+            {
+              property: "Reminder Sent",
+              checkbox: { equals: false },
+            },
+          ],
+        },
+      })) as { results: any[] };
+
+      let remindersSent = 0;
+      for (const log of response.results || []) {
+        const props = log.properties;
+        const repTelegramId = props?.["Rep ID"]?.rich_text?.[0]?.plain_text;
+        if (!repTelegramId) continue;
+
+        const companyName = props?.["Company Name"]?.rich_text?.[0]?.plain_text || "Client Account";
+        const contactPerson = props?.["Contact Person"]?.rich_text?.[0]?.plain_text;
+        const contactPhone = props?.["Contact Phone"]?.rich_text?.[0]?.plain_text;
+        const scheduledTime = props?.["Scheduled Time"]?.rich_text?.[0]?.plain_text;
+        const note = props?.["Note Content"]?.rich_text?.[0]?.plain_text || "Scheduled Follow-up Call";
+
+        const contactLine = contactPerson
+          ? `\n👤 *Contact:* ${contactPerson}${contactPhone ? ` (${contactPhone})` : ""}`
+          : "";
+        const timeLine = scheduledTime ? `\n⏰ *Scheduled Time:* ${scheduledTime}` : "";
+
+        const msg =
+          `🔔 *CALL REMINDER TODAY*\n\n` +
+          `🏢 *Company:* ${companyName}` +
+          contactLine +
+          timeLine +
+          `\n📝 *Objective:* ${note}\n\n` +
+          `🚀 _Tap below to open your Sales Mini App and update progress notes._`;
+
+        const chatId = Number.isInteger(Number(repTelegramId))
+          ? Number(repTelegramId)
+          : repTelegramId;
+
+        await this.bot.api.sendMessage(chatId, msg, { parse_mode: "Markdown" });
+        remindersSent++;
+
+        // Mark Reminder Sent in Notion
+        await this.notionClient.updatePage({
+          page_id: log.id,
+          properties: {
+            "Reminder Sent": { checkbox: true },
+          },
+        });
+      }
+
+      return { remindersSent };
+    } catch (err: any) {
+      console.warn("Could not check due reminders:", err.message);
+      return { remindersSent: 0 };
+    }
+  }
+
+  /**
    * 7-Day Inactivity Deal Sweeper.
    * Identifies active deals with no logged activity for >= thresholdDays and alerts stakeholders.
    */

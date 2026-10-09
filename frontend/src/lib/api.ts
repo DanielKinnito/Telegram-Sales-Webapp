@@ -15,6 +15,11 @@ export interface RegisterLeadInput {
   tin: string;
   address?: string;
   industry?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  isCommission?: boolean;
+  beneficiaryName?: string;
+  beneficiaryPhone?: string;
 }
 
 export interface RegisterLeadResponse {
@@ -62,6 +67,27 @@ export interface DealItem {
   amount: number | null;
   depositRef?: string | null;
   proofUrl?: string | null;
+  companyName?: string | null;
+  tin?: string | null;
+  address?: string | null;
+  industry?: string | null;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
+  isCommission?: boolean | null;
+  beneficiaryName?: string | null;
+  beneficiaryPhone?: string | null;
+}
+
+export interface ActivityItem {
+  pageId: string;
+  type: 'Note' | 'Call' | 'Meeting';
+  content: string;
+  activityDate: string;
+  scheduledTime?: string | null;
+  repId?: string | null;
+  companyName?: string | null;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
 }
 
 export interface SubmitPaymentProofResponse {
@@ -152,6 +178,33 @@ export const api = {
 
   getMe: async (): Promise<AuthMeResponse> => {
     return request<AuthMeResponse>('/api/auth/me');
+  },
+
+  // 4. Progress Notes & Scheduled Calls
+  getActivities: async (
+    dealId: string,
+    companyName?: string
+  ): Promise<{ success: boolean; activities: ActivityItem[] }> => {
+    const query = companyName ? `?companyName=${encodeURIComponent(companyName)}` : '';
+    return request<{ success: boolean; activities: ActivityItem[] }>(`/api/deals/${dealId}/activities${query}`);
+  },
+
+  addActivity: async (
+    dealId: string,
+    data: {
+      type: 'Note' | 'Call' | 'Meeting';
+      content: string;
+      scheduledDate?: string;
+      scheduledTime?: string;
+      companyName?: string;
+      contactPerson?: string;
+      contactPhone?: string;
+    }
+  ): Promise<{ success: boolean; activity: ActivityItem }> => {
+    return request<{ success: boolean; activity: ActivityItem }>(`/api/deals/${dealId}/activities`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };
 

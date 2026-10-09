@@ -16,6 +16,11 @@ export interface RegisterLeadInput {
   tin: string;
   address?: string | undefined;
   industry?: string | undefined;
+  contactPerson?: string | undefined;
+  contactPhone?: string | undefined;
+  isCommission?: boolean | undefined;
+  beneficiaryName?: string | undefined;
+  beneficiaryPhone?: string | undefined;
 }
 
 export interface RegisteredAccount {
@@ -24,6 +29,11 @@ export interface RegisteredAccount {
   tin: string;
   address?: string | undefined;
   industry?: string | undefined;
+  contactPerson?: string | undefined;
+  contactPhone?: string | undefined;
+  isCommission?: boolean | undefined;
+  beneficiaryName?: string | undefined;
+  beneficiaryPhone?: string | undefined;
   assignedDate: string;
   owner: {
     telegramId: string;
@@ -180,6 +190,36 @@ export class LeadsService {
       };
     }
 
+    if (input.contactPerson) {
+      properties["Contact Person"] = {
+        rich_text: [{ text: { content: input.contactPerson.trim() } }],
+      };
+    }
+
+    if (input.contactPhone) {
+      properties["Contact Phone"] = {
+        rich_text: [{ text: { content: input.contactPhone.trim() } }],
+      };
+    }
+
+    if (input.isCommission != null) {
+      properties["Third Party Commission"] = {
+        checkbox: !!input.isCommission,
+      };
+    }
+
+    if (input.beneficiaryName) {
+      properties["Beneficiary Name"] = {
+        rich_text: [{ text: { content: input.beneficiaryName.trim() } }],
+      };
+    }
+
+    if (input.beneficiaryPhone) {
+      properties["Beneficiary Phone"] = {
+        rich_text: [{ text: { content: input.beneficiaryPhone.trim() } }],
+      };
+    }
+
     const page = await this.notionClient.createPage({
       parent: { database_id: this.accountsDbId },
       properties,
@@ -199,6 +239,11 @@ export class LeadsService {
       tin,
       address: input.address?.trim(),
       industry: input.industry?.trim(),
+      contactPerson: input.contactPerson?.trim(),
+      contactPhone: input.contactPhone?.trim(),
+      isCommission: input.isCommission ?? false,
+      beneficiaryName: input.beneficiaryName?.trim(),
+      beneficiaryPhone: input.beneficiaryPhone?.trim(),
       assignedDate: today,
       owner: {
         telegramId: rep.telegramId,

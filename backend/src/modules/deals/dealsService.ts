@@ -9,6 +9,40 @@ export interface DealRecord {
   amount: number | null;
   depositRef: string | null;
   proofUrl: string | null;
+  companyName?: string | null;
+  tin?: string | null;
+  address?: string | null;
+  industry?: string | null;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
+  isCommission?: boolean | null;
+  beneficiaryName?: string | null;
+  beneficiaryPhone?: string | null;
+}
+
+export interface ActivityRecord {
+  pageId: string;
+  type: "Note" | "Call" | "Meeting";
+  content: string;
+  activityDate: string;
+  scheduledTime?: string | null;
+  repId?: string | null;
+  companyName?: string | null;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
+}
+
+export interface AddActivityInput {
+  dealId?: string | undefined;
+  type: "Note" | "Call" | "Meeting";
+  content: string;
+  scheduledDate?: string | undefined;
+  scheduledTime?: string | undefined;
+  repTelegramId: number | string;
+  repName?: string | undefined;
+  companyName?: string | undefined;
+  contactPerson?: string | undefined;
+  contactPhone?: string | undefined;
 }
 
 export interface SubmitPaymentProofInput {
@@ -36,6 +70,7 @@ export interface DealsServiceOptions {
   notionClient: ResilientNotionClient;
   salesRepsService?: SalesRepsService | undefined;
   dealsDbId?: string | undefined;
+  salesLogsDbId?: string | undefined;
   managerChatIds?: number[] | undefined;
   bot?: any | undefined;
 }
@@ -44,6 +79,7 @@ export class DealsService {
   private readonly notionClient: ResilientNotionClient;
   private readonly salesRepsService?: SalesRepsService | undefined;
   private readonly dealsDbId: string;
+  private readonly salesLogsDbId: string;
   private readonly managerChatIds: number[];
   private readonly bot?: any;
 
@@ -51,6 +87,7 @@ export class DealsService {
     this.notionClient = options.notionClient;
     this.salesRepsService = options.salesRepsService;
     this.dealsDbId = options.dealsDbId || env.NOTION_DEALS_DB_ID;
+    this.salesLogsDbId = options.salesLogsDbId || env.NOTION_SALES_LOGS_DB_ID;
     this.managerChatIds = options.managerChatIds || [];
     this.bot = options.bot;
   }
@@ -114,9 +151,30 @@ export class DealsService {
           props?.["Name"]?.title?.[0]?.plain_text ||
           props?.["Company Name"]?.title?.[0]?.plain_text ||
           "Client Account";
+        const tin = props?.["TIN Number"]?.rich_text?.[0]?.plain_text || null;
+        const address = props?.["Address"]?.rich_text?.[0]?.plain_text || null;
+        const industry = props?.["Industry"]?.select?.name || null;
+        const contactPerson = props?.["Contact Person"]?.rich_text?.[0]?.plain_text || null;
+        const contactPhone = props?.["Contact Phone"]?.rich_text?.[0]?.plain_text || null;
+        const isCommission = props?.["Third Party Commission"]?.checkbox ?? false;
+        const beneficiaryName = props?.["Beneficiary Name"]?.rich_text?.[0]?.plain_text || null;
+        const beneficiaryPhone = props?.["Beneficiary Phone"]?.rich_text?.[0]?.plain_text || null;
 
-        const alreadyHasDeal = deals.some((d) => d.title.includes(companyName));
-        if (!alreadyHasDeal) {
+        const existingIndex = deals.findIndex((d) => d.title.includes(companyName));
+        if (existingIndex >= 0) {
+          deals[existingIndex] = {
+            ...deals[existingIndex]!,
+            companyName,
+            tin,
+            address,
+            industry,
+            contactPerson,
+            contactPhone,
+            isCommission,
+            beneficiaryName,
+            beneficiaryPhone,
+          };
+        } else {
           deals.push({
             pageId: page.id,
             title: `${companyName} Order`,
@@ -124,6 +182,15 @@ export class DealsService {
             amount: null,
             depositRef: null,
             proofUrl: null,
+            companyName,
+            tin,
+            address,
+            industry,
+            contactPerson,
+            contactPhone,
+            isCommission,
+            beneficiaryName,
+            beneficiaryPhone,
           });
         }
       }
@@ -274,5 +341,152 @@ export class DealsService {
       },
       managersNotified,
     };
+  }
+
+  /**
+   * Log a progress note or schedule a follow-up call.
+   */
+  public async addActivity(input: AddActivityInput): Promise<ActivityRecord> {
+    const today = new Date().toISOString().split("T")[0]!;
+    const activityDate = input.scheduledDate || today;
+    const repIdStr = String(input.repTelegramId);
+
+    const properties: Record<string, any> = {
+      "Log Title / ID": {
+        title: [{ text: { content: `[${input.type}] ${input.companyName || "Activity"}` } }],
+      },
+      "Interaction Type": {
+        select: { name: input.type },
+      },
+      "Note Content": {
+        rich_text: [{ text: { content: input.content.trim() } }],
+      },
+      "Activity Date": {
+        date: { start: activityDate },
+      },
+      "Rep ID": {
+        rich_text: [{ text: { content: repIdStr } }],
+      },
+    };
+
+    if (input.companyName) {
+      properties["Company Name"] = {
+        rich_text: [{ text: { content: input.companyName.trim() } }],
+      };
+    }
+    if (input.contactPerson) {
+      properties["Contact Person"] = {
+        rich_text: [{ text: { content: input.contactPerson.trim() } }],
+      };
+    }
+    if (input.contactPhone) {
+      properties["Contact Phone"] = {
+        rich_text: [{ text: { content: input.contactPhone.trim() } }],
+      };
+    }
+    if (input.scheduledTime) {
+      properties["Scheduled Time"] = {
+        rich_text: [{ text: { content: input.scheduledTime.trim() } }],
+      };
+    }
+
+    properties["Reminder Sent"] = {
+      checkbox: false,
+    };
+
+    const page = await this.notionClient.createPage({
+      parent: { database_id: this.salesLogsDbId },
+      properties,
+    });
+
+    // If it's a scheduled Call, send confirmation via bot to rep
+    if (input.type === "Call" && this.bot && repIdStr) {
+      try {
+        const chatId = Number.isInteger(Number(repIdStr)) ? Number(repIdStr) : repIdStr;
+        const timePart = input.scheduledTime ? ` at ${input.scheduledTime}` : "";
+        const contactPart = input.contactPerson
+          ? `\n• *Contact:* ${input.contactPerson}${input.contactPhone ? ` (${input.contactPhone})` : ""}`
+          : "";
+
+        const message =
+          `📞 *Call Scheduled!*\n\n` +
+          `• *Company:* ${input.companyName || "Client Account"}` +
+          contactPart +
+          `\n• *Date:* ${activityDate}${timePart}\n` +
+          `• *Objective:* ${input.content}\n\n` +
+          `⏰ _The bot will send you a reminder alert when this call date arrives._`;
+
+        await this.bot.api.sendMessage(chatId, message, { parse_mode: "Markdown" });
+      } catch (err: any) {
+        console.warn("Could not dispatch call schedule notification to rep:", err.message);
+      }
+    }
+
+    return {
+      pageId: page.id,
+      type: input.type,
+      content: input.content.trim(),
+      activityDate,
+      scheduledTime: input.scheduledTime || null,
+      repId: repIdStr,
+      companyName: input.companyName || null,
+      contactPerson: input.contactPerson || null,
+      contactPhone: input.contactPhone || null,
+    };
+  }
+
+  /**
+   * List activities / notes for a deal or company.
+   */
+  public async listActivities(dealId?: string, companyName?: string): Promise<ActivityRecord[]> {
+    try {
+      const response = (await this.notionClient.queryDatabase(this.salesLogsDbId, {})) as {
+        results: any[];
+      };
+
+      const activities: ActivityRecord[] = [];
+      for (const page of response.results || []) {
+        const props = page.properties;
+        const pageCompanyName = props?.["Company Name"]?.rich_text?.[0]?.plain_text;
+        const title = props?.["Log Title / ID"]?.title?.[0]?.plain_text || "";
+
+        // Filter by companyName if supplied
+        if (
+          companyName &&
+          pageCompanyName &&
+          !pageCompanyName.toLowerCase().includes(companyName.toLowerCase()) &&
+          !title.toLowerCase().includes(companyName.toLowerCase())
+        ) {
+          continue;
+        }
+
+        const type = (props?.["Interaction Type"]?.select?.name as any) || "Note";
+        const content = props?.["Note Content"]?.rich_text?.[0]?.plain_text || "";
+        const activityDate = props?.["Activity Date"]?.date?.start || "";
+        const scheduledTime = props?.["Scheduled Time"]?.rich_text?.[0]?.plain_text || null;
+        const repId = props?.["Rep ID"]?.rich_text?.[0]?.plain_text || null;
+        const contactPerson = props?.["Contact Person"]?.rich_text?.[0]?.plain_text || null;
+        const contactPhone = props?.["Contact Phone"]?.rich_text?.[0]?.plain_text || null;
+
+        activities.push({
+          pageId: page.id,
+          type,
+          content,
+          activityDate,
+          scheduledTime,
+          repId,
+          companyName: pageCompanyName || null,
+          contactPerson,
+          contactPhone,
+        });
+      }
+
+      // Sort newest date first
+      activities.sort((a, b) => b.activityDate.localeCompare(a.activityDate));
+      return activities;
+    } catch (err: any) {
+      console.warn("Could not query Sales Logs DB:", err.message);
+      return [];
+    }
   }
 }

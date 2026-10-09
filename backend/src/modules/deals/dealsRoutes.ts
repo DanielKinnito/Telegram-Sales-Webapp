@@ -113,5 +113,59 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
     }
   });
 
+  // 4. List activities & progress notes for a deal / company
+  router.get("/:id/activities", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const companyName = typeof req.query.companyName === "string" ? req.query.companyName : undefined;
+      const activities = await dealsService.listActivities(dealId, companyName);
+      return res.status(200).json({ success: true, activities });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+  });
+
+  // 5. Add a note or schedule a follow-up call
+  router.post("/:id/activities", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const {
+        type = "Note",
+        content,
+        scheduledDate,
+        scheduledTime,
+        companyName,
+        contactPerson,
+        contactPhone,
+      } = req.body || {};
+
+      if (!content || typeof content !== "string" || content.trim().length === 0) {
+        return res.status(400).json({ error: "Validation Error: Note content is required" });
+      }
+
+      const activity = await dealsService.addActivity({
+        dealId,
+        type: type === "Call" ? "Call" : type === "Meeting" ? "Meeting" : "Note",
+        content: content.trim(),
+        scheduledDate,
+        scheduledTime,
+        repTelegramId: telegramUser.id,
+        repName: telegramUser.firstName,
+        companyName,
+        contactPerson,
+        contactPhone,
+      });
+
+      return res.status(201).json({ success: true, activity });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+  });
+
   return router;
 }

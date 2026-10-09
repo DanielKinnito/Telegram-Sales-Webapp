@@ -35,7 +35,17 @@ export function createLeadsRouter(leadsService: LeadsService): Router {
   // 2. Register Lead / Customer Account
   router.post("/register", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const { companyName, tin, address, industry } = req.body || {};
+      const {
+        companyName,
+        tin,
+        address,
+        industry,
+        contactPerson,
+        contactPhone,
+        isCommission,
+        beneficiaryName,
+        beneficiaryPhone,
+      } = req.body || {};
       const telegramUserId = req.telegramUser?.id;
 
       if (!telegramUserId) {
@@ -58,6 +68,11 @@ export function createLeadsRouter(leadsService: LeadsService): Router {
         tin: sanitizeTin(tin),
         address,
         industry,
+        contactPerson,
+        contactPhone,
+        isCommission: Boolean(isCommission),
+        beneficiaryName,
+        beneficiaryPhone,
       });
 
       return res.status(201).json({
