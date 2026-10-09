@@ -48,9 +48,9 @@ export function startScheduler(options: SchedulerOptions) {
     { timezone }
   );
 
-  // 3. Periodic Call Reminder Worker (Runs every 15 minutes)
+  // 3. Periodic Call Reminder Worker (Runs every minute for exact arrival)
   const reminderTask = cron.schedule(
-    "*/15 * * * *",
+    "* * * * *",
     async () => {
       try {
         const result = await cronService.checkAndDispatchDueReminders();

@@ -137,38 +137,61 @@ export class CronService {
    */
   public async checkAndDispatchDueReminders(): Promise<{ remindersSent: number }> {
     if (!this.bot) return { remindersSent: 0 };
-    const today = new Date().toISOString().split("T")[0]!;
+
+    // Get current date and 24-hr time in East Africa Time (Africa/Addis_Ababa)
+    const now = new Date();
+    const todayInAddis = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Addis_Ababa",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now); // "YYYY-MM-DD"
+
+    const nowTimeInAddis = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Addis_Ababa",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(now); // "HH:MM"
 
     try {
       const response = (await this.notionClient.queryDatabase(this.salesLogsDbId, {
         filter: {
-          and: [
-            {
-              property: "Interaction Type",
-              select: { equals: "Call" },
-            },
-            {
-              property: "Activity Date",
-              date: { on_or_before: today },
-            },
-            {
-              property: "Reminder Sent",
-              checkbox: { equals: false },
-            },
-          ],
+          property: "Interaction Type",
+          select: { equals: "Call" },
         },
       })) as { results: any[] };
 
       let remindersSent = 0;
       for (const log of response.results || []) {
         const props = log.properties;
+        const isSent = props?.["Reminder Sent"]?.checkbox === true;
+        if (isSent) continue;
+
+        const activityDate = props?.["Activity Date"]?.date?.start;
+        if (!activityDate) continue;
+
+        const scheduledTime = props?.["Scheduled Time"]?.rich_text?.[0]?.plain_text?.trim() || "";
+
+        // If scheduled date is in the future, don't alert yet
+        if (activityDate > todayInAddis) {
+          continue;
+        }
+
+        // If scheduled for today and a specific time was set (e.g. "11:21"), check if current time has arrived
+        if (activityDate === todayInAddis && scheduledTime) {
+          if (scheduledTime > nowTimeInAddis) {
+            // Not due yet
+            continue;
+          }
+        }
+
         const repTelegramId = props?.["Rep ID"]?.rich_text?.[0]?.plain_text;
         if (!repTelegramId) continue;
 
         const companyName = props?.["Company Name"]?.rich_text?.[0]?.plain_text || "Client Account";
         const contactPerson = props?.["Contact Person"]?.rich_text?.[0]?.plain_text;
         const contactPhone = props?.["Contact Phone"]?.rich_text?.[0]?.plain_text;
-        const scheduledTime = props?.["Scheduled Time"]?.rich_text?.[0]?.plain_text;
         const note = props?.["Note Content"]?.rich_text?.[0]?.plain_text || "Scheduled Follow-up Call";
 
         const contactLine = contactPerson
@@ -177,12 +200,12 @@ export class CronService {
         const timeLine = scheduledTime ? `\n⏰ *Scheduled Time:* ${scheduledTime}` : "";
 
         const msg =
-          `🔔 *CALL REMINDER TODAY*\n\n` +
+          `🔔 *CALL REMINDER: TIME ARRIVED!*\n\n` +
           `🏢 *Company:* ${companyName}` +
           contactLine +
           timeLine +
           `\n📝 *Objective:* ${note}\n\n` +
-          `🚀 _Tap below to open your Sales Mini App and update progress notes._`;
+          `📞 _Open your Sales Mini App to make the call and log progress notes._`;
 
         const chatId = Number.isInteger(Number(repTelegramId))
           ? Number(repTelegramId)

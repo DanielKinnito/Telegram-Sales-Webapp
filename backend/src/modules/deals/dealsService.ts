@@ -417,6 +417,43 @@ export class DealsService {
           `⏰ _The bot will send you a reminder alert when this call date arrives._`;
 
         await this.bot.api.sendMessage(chatId, message, { parse_mode: "Markdown" });
+
+        // Precision timer: If call is scheduled within the next 24 hours, fire at the exact minute
+        if (input.scheduledTime) {
+          const targetDateTimeStr = `${activityDate}T${input.scheduledTime}:00+03:00`;
+          const targetMs = new Date(targetDateTimeStr).getTime();
+          const delayMs = targetMs - Date.now();
+
+          if (delayMs > 0 && delayMs <= 24 * 60 * 60 * 1000) {
+            setTimeout(async () => {
+              try {
+                const freshPage: any = await this.notionClient.retrievePage({ page_id: page.id });
+                if (freshPage?.properties?.["Reminder Sent"]?.checkbox === true) {
+                  return;
+                }
+
+                const alertMsg =
+                  `🔔 *CALL REMINDER: TIME ARRIVED!*\n\n` +
+                  `🏢 *Company:* ${input.companyName || "Client Account"}` +
+                  contactPart +
+                  `\n⏰ *Scheduled Time:* ${input.scheduledTime}` +
+                  `\n📝 *Objective:* ${input.content}\n\n` +
+                  `📞 _Open your Sales Mini App to make the call and log progress notes._`;
+
+                await this.bot.api.sendMessage(chatId, alertMsg, { parse_mode: "Markdown" });
+
+                await this.notionClient.updatePage({
+                  page_id: page.id,
+                  properties: {
+                    "Reminder Sent": { checkbox: true },
+                  },
+                });
+              } catch (timeoutErr: any) {
+                console.warn("In-memory call reminder timeout error:", timeoutErr.message);
+              }
+            }, delayMs);
+          }
+        }
       } catch (err: any) {
         console.warn("Could not dispatch call schedule notification to rep:", err.message);
       }
