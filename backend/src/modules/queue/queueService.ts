@@ -244,6 +244,34 @@ export class QueueService {
       properties,
     });
 
+    // Create initial Deal in Deals DB linked to this Account
+    try {
+        const dealProps: Record<string, any> = {
+          "Deal Title": {
+            title: [{ text: { content: `${input.companyName.trim()} Order` } }],
+          },
+          "Stage": {
+            select: { name: "Proposal" },
+          },
+          "Account": {
+            relation: [{ id: accountPage.id }],
+          },
+        };
+
+        if (rep.pageId) {
+          dealProps["Assigned Rep"] = {
+            relation: [{ id: rep.pageId }],
+          };
+        }
+
+        await this.notionClient.createPage({
+          parent: { database_id: env.NOTION_DEALS_DB_ID },
+          properties: dealProps,
+        });
+    } catch (dealErr: any) {
+      console.warn("Could not create initial Deal for walk-in lead:", dealErr.message);
+    }
+
     // 5. Send Telegram notification to assigned rep
     let notificationSent = false;
     if (this.bot && rep.telegramId) {

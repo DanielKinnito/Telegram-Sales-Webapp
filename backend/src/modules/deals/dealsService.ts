@@ -233,7 +233,7 @@ export class DealsService {
   }
 
   /**
-   * Retrieves a Deal record from Notion by page ID.
+   * Retrieves a Deal record from Notion by page ID (handles both Deals DB pages and Accounts DB pages).
    */
   public async getDeal(pageId: string): Promise<DealRecord> {
     try {
@@ -243,8 +243,9 @@ export class DealsService {
       const title =
         props?.["Deal Title"]?.title?.[0]?.plain_text ||
         props?.["Name"]?.title?.[0]?.plain_text ||
+        props?.["Company Name"]?.title?.[0]?.plain_text ||
         "Untitled Deal";
-      const stage = props?.["Stage"]?.select?.name || "New";
+      const stage = props?.["Stage"]?.select?.name || "Proposal";
       const amount = props?.["Amount"]?.number ?? null;
       const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
       const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
@@ -265,6 +266,7 @@ export class DealsService {
   /**
    * Submits a payment proof for a deal, updates Notion stage to 'Payment Pending Verification',
    * and notifies managers via Telegram push.
+   * Resiliently handles both Deal DB records and newly registered Account records.
    */
   public async submitPaymentProof(
     input: SubmitPaymentProofInput
@@ -272,9 +274,9 @@ export class DealsService {
     if (
       !input.proofUrl ||
       typeof input.proofUrl !== "string" ||
-      !input.proofUrl.startsWith("http")
+      !input.proofUrl.trim().startsWith("http")
     ) {
-      throw new Error("Validation Error: A valid transaction link (http/https) is required");
+      throw new Error("Validation Error: A valid transaction link starting with https:// or http:// is required");
     }
 
     const finalDepositRef =
@@ -282,35 +284,133 @@ export class DealsService {
         ? input.depositRef.trim()
         : "Bank Share Link";
 
-    // 1. Ensure deal exists
-    const deal = await this.getDeal(input.dealId);
+    // 1. Retrieve the target page to detect if it's already a Deal or an Account page
+    let targetPage: any;
+    try {
+      targetPage = await this.notionClient.retrievePage({ page_id: input.dealId });
+    } catch {
+      throw new Error(`Deal not found: ${input.dealId}`);
+    }
 
-    // 2. Update Deal page in Notion
-    await this.notionClient.updatePage({
-      page_id: input.dealId,
-      properties: {
-        "Stage": {
-          select: { name: "Payment Pending Verification" },
+    const targetDbId = targetPage.parent?.database_id?.replace(/-/g, "");
+    const accountsDbCleanId = env.NOTION_ACCOUNTS_DB_ID?.replace(/-/g, "");
+
+    // Detect if the target is an Account page rather than a Deal page
+    const isAccountPage = Boolean(
+      (targetDbId && accountsDbCleanId && targetDbId === accountsDbCleanId) ||
+      (targetPage.properties?.["TIN Number"] && !targetPage.properties?.["Stage"])
+    );
+
+    let dealPageId = input.dealId;
+    let dealTitle =
+      targetPage.properties?.["Deal Title"]?.title?.[0]?.plain_text ||
+      targetPage.properties?.["Name"]?.title?.[0]?.plain_text ||
+      targetPage.properties?.["Company Name"]?.title?.[0]?.plain_text ||
+      "Client Order";
+    let dealAmount: number | null = targetPage.properties?.["Amount"]?.number ?? null;
+
+    if (isAccountPage) {
+      // The page ID came from Accounts DB!
+      // Check if a Deal already exists in Deals DB linked to this Account
+      let linkedDealsRes: { results?: any[] } = {};
+      try {
+        linkedDealsRes = (await this.notionClient.queryDatabase(this.dealsDbId, {
+          filter: {
+            property: "Account",
+            relation: {
+              contains: input.dealId,
+            },
+          },
+        })) || {};
+      } catch {
+        linkedDealsRes = { results: [] };
+      }
+
+      if (linkedDealsRes.results && linkedDealsRes.results.length > 0) {
+        const existingDeal = linkedDealsRes.results[0];
+        dealPageId = existingDeal.id;
+        dealTitle =
+          existingDeal.properties?.["Deal Title"]?.title?.[0]?.plain_text ||
+          dealTitle;
+        dealAmount = existingDeal.properties?.["Amount"]?.number ?? dealAmount;
+
+        // Update the existing linked Deal
+        await this.notionClient.updatePage({
+          page_id: dealPageId,
+          properties: {
+            "Stage": {
+              select: { name: "Payment Pending Verification" },
+            },
+            "Deposit Ref #": {
+              rich_text: [{ text: { content: finalDepositRef } }],
+            },
+            "Payment Proof URL": {
+              url: input.proofUrl.trim(),
+            },
+          },
+        });
+      } else {
+        // Create a new Deal record in Deals DB linked to this Account
+        const repRelation = targetPage.properties?.["Owner"]?.relation?.[0]?.id;
+        const dealProps: Record<string, any> = {
+          "Deal Title": {
+            title: [{ text: { content: dealTitle.endsWith("Order") ? dealTitle : `${dealTitle} Order` } }],
+          },
+          "Stage": {
+            select: { name: "Payment Pending Verification" },
+          },
+          "Deposit Ref #": {
+            rich_text: [{ text: { content: finalDepositRef } }],
+          },
+          "Payment Proof URL": {
+            url: input.proofUrl.trim(),
+          },
+          "Account": {
+            relation: [{ id: input.dealId }],
+          },
+        };
+
+        if (repRelation) {
+          dealProps["Assigned Rep"] = {
+            relation: [{ id: repRelation }],
+          };
+        }
+
+        const newDealPage = await this.notionClient.createPage({
+          parent: { database_id: this.dealsDbId },
+          properties: dealProps,
+        });
+
+        dealPageId = newDealPage.id;
+      }
+    } else {
+      // Target is directly a Deal page in Deals DB
+      await this.notionClient.updatePage({
+        page_id: dealPageId,
+        properties: {
+          "Stage": {
+            select: { name: "Payment Pending Verification" },
+          },
+          "Deposit Ref #": {
+            rich_text: [{ text: { content: finalDepositRef } }],
+          },
+          "Payment Proof URL": {
+            url: input.proofUrl.trim(),
+          },
         },
-        "Deposit Ref #": {
-          rich_text: [{ text: { content: finalDepositRef } }],
-        },
-        "Payment Proof URL": {
-          url: input.proofUrl.trim(),
-        },
-      },
-    });
+      });
+    }
 
     // 3. Dispatch Telegram notifications to Managers
     let managersNotified = 0;
     if (this.bot && this.managerChatIds.length > 0) {
       const amountFormatted =
-        deal.amount != null ? `ETB ${Number(deal.amount).toLocaleString()}` : "N/A";
+        dealAmount != null ? `ETB ${Number(dealAmount).toLocaleString()}` : "N/A";
       const submitter = input.submittedByName || "Sales Representative";
 
       const message =
         `💳 *Bank Payment Transaction Link Submitted!*\n\n` +
-        `• *Deal:* ${deal.title}\n` +
+        `• *Deal:* ${dealTitle}\n` +
         `• *Amount:* ${amountFormatted}\n` +
         `• *Reference / Note:* ${finalDepositRef}\n` +
         `• *Submitted by:* ${submitter}\n\n` +
@@ -332,10 +432,10 @@ export class DealsService {
     return {
       success: true,
       deal: {
-        pageId: input.dealId,
-        title: deal.title,
+        pageId: dealPageId,
+        title: dealTitle,
         stage: "Payment Pending Verification",
-        amount: deal.amount,
+        amount: dealAmount,
         depositRef: finalDepositRef,
         proofUrl: input.proofUrl.trim(),
       },

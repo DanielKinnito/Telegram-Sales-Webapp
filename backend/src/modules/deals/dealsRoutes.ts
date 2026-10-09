@@ -63,7 +63,7 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
       }
 
       return res.status(500).json({
-        error: "Internal Server Error",
+        error: err.message || "Failed to process payment link in CRM",
         details: err.message,
       });
     }

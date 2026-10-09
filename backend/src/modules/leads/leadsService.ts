@@ -225,7 +225,30 @@ export class LeadsService {
       properties,
     });
 
-    // 4. Update in-memory cache immediately
+    // 4. Create initial Deal in Deals DB linked to this Account
+    try {
+      await this.notionClient.createPage({
+        parent: { database_id: env.NOTION_DEALS_DB_ID },
+        properties: {
+          "Deal Title": {
+            title: [{ text: { content: `${input.companyName.trim()} Order` } }],
+          },
+          "Stage": {
+            select: { name: "Proposal" },
+          },
+          "Account": {
+            relation: [{ id: page.id }],
+          },
+          "Assigned Rep": {
+            relation: [{ id: rep.pageId }],
+          },
+        },
+      });
+    } catch (dealErr: any) {
+      console.warn("Could not create initial Deal for registered Account:", dealErr.message);
+    }
+
+    // 5. Update in-memory cache immediately
     this.tinCache.set(tin, {
       companyName: input.companyName.trim(),
       ownerName: rep.fullName,

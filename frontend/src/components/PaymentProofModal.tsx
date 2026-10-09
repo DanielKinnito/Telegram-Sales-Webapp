@@ -42,15 +42,19 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    const cleanUrl = proofUrl.trim();
+    let cleanUrl = proofUrl.trim();
     if (!cleanUrl) {
-      setErrorMessage('Bank transaction link is required.');
+      setErrorMessage('Please enter the bank transaction confirmation link.');
       triggerHaptic('error');
       return;
     }
 
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+
     if (!isValidHttpUrl(cleanUrl)) {
-      setErrorMessage('Please enter a valid web link starting with https:// or http://');
+      setErrorMessage('Please enter a valid web link (e.g. https://mbreceipt.cbe.com.et/... or https://telebirr.et/...)');
       triggerHaptic('error');
       return;
     }
