@@ -92,7 +92,7 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
         return res.status(200).json({ success: true, deals });
       }
 
-      const deals = await dealsService.listDealsForRep(rep.pageId);
+      const deals = await dealsService.listDealsForRep(rep.pageId, rep.fullName);
       return res.status(200).json({ success: true, deals });
     } catch (err: any) {
       return res.status(500).json({ error: "Internal Server Error", details: err.message });

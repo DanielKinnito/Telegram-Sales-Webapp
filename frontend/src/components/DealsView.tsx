@@ -44,13 +44,14 @@ export const DealsView: React.FC = () => {
       });
   }, []);
 
-  // Filter chips: All, Won, Lost
-  const filterStages = ['All', 'Won', 'Lost'];
+  // Filter chips: All, In Progress, Won, Lost
+  const filterStages = ['All', 'In Progress', 'Won', 'Lost'];
 
   const filteredDeals = deals.filter((d) => {
     if (activeStageFilter === 'All') return true;
     if (activeStageFilter === 'Won') return d.stage === 'Won';
     if (activeStageFilter === 'Lost') return d.stage === 'Lost';
+    if (activeStageFilter === 'In Progress') return d.stage !== 'Won' && d.stage !== 'Lost';
     return d.stage === activeStageFilter;
   });
 
@@ -196,10 +197,14 @@ export const DealsView: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            setActiveStageFilter('All');
+            setActiveStageFilter('In Progress');
             triggerHaptic('light');
           }}
-          className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center transition-all apple-press border bg-white dark:bg-[#1c1c1e] border-black/5 dark:border-white/5 hover:border-black/10"
+          className={`p-3.5 rounded-2xl flex flex-col items-center justify-center text-center transition-all apple-press border ${
+            activeStageFilter === 'In Progress'
+              ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-500 shadow-xs'
+              : 'bg-white dark:bg-[#1c1c1e] border-black/5 dark:border-white/5 hover:border-black/10'
+          }`}
         >
           <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center mb-2 shadow-xs">
             <Clock className="w-5 h-5" />

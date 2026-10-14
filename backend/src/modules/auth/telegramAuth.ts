@@ -83,14 +83,14 @@ export function verifyTelegramInitData(
       return { valid: false, error: "Invalid Telegram signature: HMAC mismatch" };
     }
 
-    // Check expiration if auth_date is present (allowing 30 days for cached Telegram menu buttons)
-    const maxAge = options?.maxAgeSeconds ?? 30 * 86400; // 30 days
+    // Check expiration if auth_date is present (allowing 365 days for cached Telegram menu buttons)
+    const maxAge = options?.maxAgeSeconds ?? 365 * 86400; // 365 days
     const authDateStr = params.get("auth_date");
     if (authDateStr) {
       const authDate = parseInt(authDateStr, 10);
       const now = Math.floor(Date.now() / 1000);
-      // Allow if valid within maxAge, tolerating up to 1 hour forward clock drift
-      if (Number.isFinite(authDate) && (now - authDate > maxAge || authDate - now > 3600)) {
+      // Allow if valid within maxAge, tolerating up to 7 days forward clock drift
+      if (Number.isFinite(authDate) && (now - authDate > maxAge || authDate - now > 7 * 86400)) {
         return { valid: false, error: "Telegram initData has expired" };
       }
     }

@@ -99,33 +99,49 @@ export class DealsService {
    * Retrieves all Deals assigned to a specific Sales Rep in Notion.
    * Also includes any Accounts created by this rep.
    */
-  public async listDealsForRep(repPageId: string): Promise<DealRecord[]> {
+  public async listDealsForRep(repPageId: string, repFullName?: string): Promise<DealRecord[]> {
     const deals: DealRecord[] = [];
 
     try {
       // 1. Query Deals DB
-      const response = (await this.notionClient.queryDatabase(this.dealsDbId, {
-        filter: {
-          property: "Assigned Rep",
-          relation: {
-            contains: repPageId,
+      // If repFullName is provided, filter by "Rep Name"; otherwise query all and filter in memory
+      const filterObj: Record<string, any> = {};
+      if (repFullName && repFullName.trim().length > 0) {
+        filterObj.filter = {
+          property: "Rep Name",
+          rich_text: {
+            equals: repFullName.trim(),
           },
-        },
-      })) as { results: any[] };
+        };
+      }
+
+      const response = (await this.notionClient.queryDatabase(this.dealsDbId, filterObj)) as { results: any[] };
 
       for (const page of response.results || []) {
         const props = page.properties;
+        const repNameVal = props?.["Rep Name"]?.rich_text?.[0]?.plain_text || "";
+
+        // If repFullName was passed, ensure case-insensitive or exact match
+        if (
+          repFullName &&
+          repFullName.trim().length > 0 &&
+          repNameVal.trim().toLowerCase() !== repFullName.trim().toLowerCase()
+        ) {
+          continue;
+        }
+
         const title =
           props?.["Deal Title"]?.title?.[0]?.plain_text ||
           props?.["Name"]?.title?.[0]?.plain_text ||
           "Untitled Deal";
-        const stage = props?.["Stage"]?.select?.name || "New";
+        const stage = props?.["Stage"]?.select?.name || "Proposal";
         const amount = props?.["Amount"]?.number ?? props?.["Offer VAT Incl"]?.number ?? null;
         const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
         const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
         const productType = props?.["Product Type"]?.rich_text?.[0]?.plain_text ?? null;
         const offerAmount = props?.["Offer VAT Incl"]?.number ?? amount;
         const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? null;
+        const companyName = props?.["Account Name"]?.rich_text?.[0]?.plain_text ?? null;
 
         deals.push({
           pageId: page.id,
@@ -134,6 +150,7 @@ export class DealsService {
           amount,
           depositRef,
           proofUrl,
+          companyName,
           productType,
           offerAmount,
           lostReason,
@@ -169,11 +186,18 @@ export class DealsService {
         const beneficiaryName = props?.["Beneficiary Name"]?.rich_text?.[0]?.plain_text || null;
         const beneficiaryPhone = props?.["Beneficiary Phone"]?.rich_text?.[0]?.plain_text || null;
 
-        const existingIndex = deals.findIndex((d) => d.title.includes(companyName));
+        const cleanComp = companyName.trim().toLowerCase();
+        const existingIndex = deals.findIndex(
+          (d) =>
+            (d.companyName && d.companyName.trim().toLowerCase() === cleanComp) ||
+            d.title.trim().toLowerCase().includes(cleanComp) ||
+            cleanComp.includes(d.title.replace(/ Order$/i, "").trim().toLowerCase())
+        );
+
         if (existingIndex >= 0) {
           deals[existingIndex] = {
             ...deals[existingIndex]!,
-            companyName,
+            companyName: deals[existingIndex]!.companyName || companyName,
             tin,
             address,
             industry,

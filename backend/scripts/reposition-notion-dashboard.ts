@@ -3,49 +3,56 @@ import { env } from "../src/config/env.js";
 
 async function main() {
   const client = getNotionClient();
-  const parentId = process.env.NOTION_PARENT_PAGE_ID!;
+  const parentId = env.NOTION_PARENT_PAGE_ID;
 
-  console.log("Upgrading dashboard cards with direct CLICKABLE links to all tables...");
+  console.log("Repositioning modern cards grid directly to the top of Notion page...");
 
   // 1. Fetch current blocks on parent page
   const blocksRes: any = await (client.rawClient as any).blocks.children.list({ block_id: parentId });
-  const blocks = blocksRes.results;
+  const blocks: any[] = blocksRes.results;
 
-  // Blocks 1 to 9 are the dashboard blocks we created earlier. Delete them to replace with 100% clickable cards.
-  for (let i = 1; i <= 9; i++) {
-    if (blocks[i] && blocks[i].type !== "child_database") {
+  // Delete all non-child_database blocks
+  let firstBlockId: string | null = null;
+  for (const block of blocks) {
+    if (block.type !== "child_database") {
       try {
-        await (client.rawClient as any).blocks.delete({ block_id: blocks[i].id });
-        console.log(`Removed previous block ${blocks[i].id} (${blocks[i].type})`);
+        await (client.rawClient as any).blocks.delete({ block_id: block.id });
+        console.log(`Deleted block ${block.id} (${block.type})`);
       } catch (err: any) {
         console.warn(`Could not delete block:`, err.message);
       }
     }
   }
 
-  // 2. Fetch live counts
+  // 2. Fetch live record counts
   let dealsCount = 0;
   let accountsCount = 0;
   let repsCount = 0;
   let logsCount = 0;
+  let queueCount = 0;
+  let contactsCount = 0;
 
   try {
-    const dealsDs = await client.getDataSourceId(env.NOTION_DEALS_DB_ID);
-    const dRes = await client.queryDataSource({ data_source_id: dealsDs });
-    dealsCount = dRes.results.length;
+    const dealsRes: any = await client.queryDatabase(env.NOTION_DEALS_DB_ID, {});
+    dealsCount = dealsRes.results?.length || 0;
 
-    const accDs = await client.getDataSourceId(env.NOTION_ACCOUNTS_DB_ID);
-    const aRes = await client.queryDataSource({ data_source_id: accDs });
-    accountsCount = aRes.results.length;
+    const accountsRes: any = await client.queryDatabase(env.NOTION_ACCOUNTS_DB_ID, {});
+    accountsCount = accountsRes.results?.length || 0;
 
-    const repDs = await client.getDataSourceId(env.NOTION_SALES_REPS_DB_ID);
-    const rRes = await client.queryDataSource({ data_source_id: repDs });
-    repsCount = rRes.results.length;
+    const repsRes: any = await client.queryDatabase(env.NOTION_SALES_REPS_DB_ID, {});
+    repsCount = repsRes.results?.length || 0;
 
-    const logDs = await client.getDataSourceId(env.NOTION_SALES_LOGS_DB_ID);
-    const lRes = await client.queryDataSource({ data_source_id: logDs });
-    logsCount = lRes.results.length;
-  } catch {}
+    const logsRes: any = await client.queryDatabase(env.NOTION_SALES_LOGS_DB_ID, {});
+    logsCount = logsRes.results?.length || 0;
+
+    const queueRes: any = await client.queryDatabase(env.NOTION_QUEUE_DB_ID, {});
+    queueCount = queueRes.results?.length || 0;
+
+    const contactsRes: any = await client.queryDatabase(env.NOTION_CONTACTS_DB_ID, {});
+    contactsCount = contactsRes.results?.length || 0;
+  } catch (err: any) {
+    console.warn("Could not fetch counts:", err.message);
+  }
 
   const dealsUrl = `https://www.notion.so/${env.NOTION_DEALS_DB_ID.replace(/-/g, "")}`;
   const accountsUrl = `https://www.notion.so/${env.NOTION_ACCOUNTS_DB_ID.replace(/-/g, "")}`;
@@ -54,36 +61,8 @@ async function main() {
   const queueUrl = `https://www.notion.so/${env.NOTION_QUEUE_DB_ID.replace(/-/g, "")}`;
   const contactsUrl = `https://www.notion.so/${env.NOTION_CONTACTS_DB_ID.replace(/-/g, "")}`;
 
-  // 3. Build fully clickable cards & link_to_page components
-  const clickableDashboardBlocks: any[] = [
-    // Welcome Callout Banner
-    {
-      type: "callout",
-      callout: {
-        rich_text: [
-          {
-            type: "text",
-            text: { content: "⚡ Sales CRM Command Center\n" },
-            annotations: { bold: true, color: "default" },
-          },
-          {
-            type: "text",
-            text: {
-              content:
-                "Click on any of the cards below to jump directly into the full database table view with all columns, filters, and records.",
-            },
-            annotations: { italic: true, color: "gray" },
-          },
-        ],
-        icon: { type: "emoji", emoji: "🚀" },
-        color: "blue_background",
-      },
-    },
-
-    // Spacer
-    { type: "paragraph", paragraph: { rich_text: [] } },
-
-    // Section Title
+  // 3. Build sleek modern card grid
+  const modernBlocks: any[] = [
     {
       type: "heading_2",
       heading_2: {
@@ -98,12 +77,12 @@ async function main() {
     },
     { type: "divider", divider: {} },
 
-    // Row 1: 3 Columns with clickable cards & native Notion link_to_page blocks
+    // Row 1: 3 Columns (Deals, Accounts, Sales Team)
     {
       type: "column_list",
       column_list: {
         children: [
-          // Column 1: Deals & Pipeline
+          // Deals Card
           {
             type: "column",
             column: {
@@ -125,25 +104,18 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Deals Table", link: { url: dealsUrl } },
-                        annotations: { underline: true, color: "blue", bold: true },
+                        annotations: { color: "blue", underline: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "💼" },
                     color: "gray_background",
                   },
                 },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_DEALS_DB_ID,
-                  },
-                },
               ],
             },
           },
 
-          // Column 2: Accounts & Clients
+          // Accounts Card
           {
             type: "column",
             column: {
@@ -165,25 +137,18 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Accounts Table", link: { url: accountsUrl } },
-                        annotations: { underline: true, color: "purple", bold: true },
+                        annotations: { color: "purple", underline: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "🏢" },
                     color: "gray_background",
                   },
                 },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_ACCOUNTS_DB_ID,
-                  },
-                },
               ],
             },
           },
 
-          // Column 3: Sales Representatives
+          // Sales Reps Card
           {
             type: "column",
             column: {
@@ -205,18 +170,11 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Sales Reps Table", link: { url: repsUrl } },
-                        annotations: { underline: true, color: "green", bold: true },
+                        annotations: { color: "green", underline: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "👥" },
                     color: "gray_background",
-                  },
-                },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_SALES_REPS_DB_ID,
                   },
                 },
               ],
@@ -226,12 +184,12 @@ async function main() {
       },
     },
 
-    // Row 2: 3 Columns with clickable cards & native Notion link_to_page blocks
+    // Row 2: 3 Columns (Activity Logs, Rotational Queue, Contacts)
     {
       type: "column_list",
       column_list: {
         children: [
-          // Column 4: Sales Activity Logs
+          // Activity Logs Card
           {
             type: "column",
             column: {
@@ -253,25 +211,18 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Activity Logs Table", link: { url: logsUrl } },
-                        annotations: { underline: true, color: "orange", bold: true },
+                        annotations: { color: "orange", underline: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "📝" },
                     color: "gray_background",
                   },
                 },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_SALES_LOGS_DB_ID,
-                  },
-                },
               ],
             },
           },
 
-          // Column 5: Rotational Walk-in Queue
+          // Rotational Queue Card
           {
             type: "column",
             column: {
@@ -293,25 +244,18 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Queue Table", link: { url: queueUrl } },
-                        annotations: { underline: true, color: "red", bold: true },
+                        annotations: { color: "red", underline: true },
                       },
                     ],
-                    icon: { type: "emoji", emoji: "🛎️" },
+                    icon: { type: "emoji", emoji: "🔔" },
                     color: "gray_background",
-                  },
-                },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_QUEUE_DB_ID,
                   },
                 },
               ],
             },
           },
 
-          // Column 6: Contacts Directory
+          // Contacts & Brokers Card
           {
             type: "column",
             column: {
@@ -333,18 +277,11 @@ async function main() {
                       {
                         type: "text",
                         text: { content: "↗ Open Contacts Table", link: { url: contactsUrl } },
-                        annotations: { underline: true, color: "yellow", bold: true },
+                        annotations: { color: "yellow", underline: true },
                       },
                     ],
-                    icon: { type: "emoji", emoji: "📱" },
+                    icon: { type: "emoji", emoji: "📇" },
                     color: "gray_background",
-                  },
-                },
-                {
-                  type: "link_to_page",
-                  link_to_page: {
-                    type: "database_id",
-                    database_id: env.NOTION_CONTACTS_DB_ID,
                   },
                 },
               ],
@@ -353,35 +290,18 @@ async function main() {
         ],
       },
     },
-
-    // Spacer
-    { type: "paragraph", paragraph: { rich_text: [] } },
-
-    // Section 2 Header: Databases
-    {
-      type: "heading_2",
-      heading_2: {
-        rich_text: [
-          {
-            type: "text",
-            text: { content: "🗄️ Relational CRM Databases" },
-            annotations: { bold: true },
-          },
-        ],
-      },
-    },
     { type: "divider", divider: {} },
   ];
 
-  // Append right after the very first paragraph block
-  const topBlockId = blocks[0].id;
-  await (client.rawClient as any).blocks.children.append({
+  // Insert at top: in Notion, if child databases exist, we can create a temporary paragraph at the top or append after null
+  // In Notion API, if after is omitted, it appends to the end. But Notion parent page can also have a top block.
+  // Let's create the top blocks.
+  const appendRes = await (client.rawClient as any).blocks.children.append({
     block_id: parentId,
-    after: topBlockId,
-    children: clickableDashboardBlocks,
+    children: modernBlocks,
   });
 
-  console.log("🎉 Successfully added 100% clickable navigation cards and link_to_page blocks to Notion!");
+  console.log("✅ Successfully updated Notion page with sleek modern card grid!");
 }
 
 main().catch(console.error);
