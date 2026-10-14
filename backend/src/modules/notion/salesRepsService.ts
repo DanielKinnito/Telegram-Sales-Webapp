@@ -30,7 +30,7 @@ export class SalesRepsService {
    * Find a Sales Rep by Telegram ID from the Notion Sales Reps DB.
    */
   public async findSalesRepByTelegramId(telegramId: string | number): Promise<SalesRepRecord | null> {
-    const tidString = telegramId.toString();
+    const tidString = telegramId.toString().trim();
 
     const response = (await this.notionClient.queryDatabase(this.databaseId, {
       filter: {
@@ -41,11 +41,17 @@ export class SalesRepsService {
       },
     })) as { results: any[] };
 
-    if (!response.results || response.results.length === 0) {
+    let page = response.results?.[0];
+
+    // Fallback: in case of leading/trailing spaces or case issues in Notion
+    if (!page) {
+      const allReps = await this.getActiveSalesReps();
+      const foundActive = allReps.find((r) => r.telegramId.trim() === tidString);
+      if (foundActive) {
+        return foundActive;
+      }
       return null;
     }
-
-    const page = response.results[0];
     const props = page.properties;
 
     const tid = props?.["Telegram ID"]?.title?.[0]?.plain_text || tidString;

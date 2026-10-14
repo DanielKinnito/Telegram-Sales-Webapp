@@ -76,6 +76,9 @@ export interface DealItem {
   isCommission?: boolean | null;
   beneficiaryName?: string | null;
   beneficiaryPhone?: string | null;
+  productType?: string | null;
+  offerAmount?: number | null;
+  lostReason?: string | null;
 }
 
 export interface ActivityItem {
@@ -179,6 +182,35 @@ export const api = {
 
   getDeals: async (): Promise<{ success: boolean; deals: DealItem[] }> => {
     return request<{ success: boolean; deals: DealItem[] }>('/api/deals');
+  },
+
+  updateDealStage: async (
+    dealId: string,
+    data: {
+      stage: string;
+      reason?: string;
+      productType?: string;
+      offerAmount?: number;
+    }
+  ): Promise<{ success: boolean; deal: DealItem }> => {
+    return request<{ success: boolean; deal: DealItem }>(`/api/deals/${dealId}/stage`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  submitProposedOffer: async (
+    dealId: string,
+    data: {
+      productType: string;
+      offerAmount: number;
+      companyName?: string;
+    }
+  ): Promise<{ success: boolean; deal: DealItem }> => {
+    return request<{ success: boolean; deal: DealItem }>(`/api/deals/${dealId}/proposed-offer`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   getMe: async (): Promise<AuthMeResponse> => {

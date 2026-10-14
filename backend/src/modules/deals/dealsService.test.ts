@@ -14,6 +14,7 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
       retrievePage: vi.fn(),
       updatePage: vi.fn(),
       queryDatabase: vi.fn(),
+      createPage: vi.fn(),
     };
 
     mockSalesRepsService = {
@@ -159,6 +160,106 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
         10002,
         expect.stringMatching(/Bank Payment Transaction Link Submitted/i),
         expect.anything()
+      );
+    });
+  });
+
+  describe("updateDealStage", () => {
+    it("updates stage to 'Won' and records timeline log", async () => {
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "Awash Wine Supply Deal" }] },
+          "Amount": { number: 450000 },
+          "Stage": { select: { name: "Proposal" } },
+        },
+      });
+
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_1" });
+
+      const result = await service.updateDealStage("deal_p1", {
+        stage: "Won",
+      });
+
+      expect(result.stage).toBe("Won");
+      expect(mockNotionClient.updatePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_id: "deal_p1",
+          properties: expect.objectContaining({
+            Stage: { select: { name: "Won" } },
+          }),
+        })
+      );
+    });
+
+    it("updates stage to 'Lost' with reason", async () => {
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "Awash Wine Supply Deal" }] },
+          "Amount": { number: 450000 },
+          "Stage": { select: { name: "Proposal" } },
+        },
+      });
+
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_2" });
+
+      const result = await service.updateDealStage("deal_p1", {
+        stage: "Lost",
+        reason: "Customer chose competitor generator due to immediate stock availability.",
+      });
+
+      expect(result.stage).toBe("Lost");
+      expect(result.lostReason).toBe("Customer chose competitor generator due to immediate stock availability.");
+      expect(mockNotionClient.updatePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_id: "deal_p1",
+          properties: expect.objectContaining({
+            Stage: { select: { name: "Lost" } },
+            "Lost Reason": {
+              rich_text: [{ text: { content: "Customer chose competitor generator due to immediate stock availability." } }],
+            },
+          }),
+        })
+      );
+    });
+  });
+
+  describe("submitProposedOffer", () => {
+    it("updates equipment type and VAT-inclusive amount for proposal", async () => {
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "Sunshine Construction" }] },
+          "Amount": { number: null },
+          "Stage": { select: { name: "New" } },
+        },
+      });
+
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_3" });
+
+      const result = await service.submitProposedOffer("deal_p1", {
+        productType: "Cummins 100kVA Soundproof Generator",
+        offerAmount: 1850000,
+      });
+
+      expect(result.stage).toBe("Proposal");
+      expect(result.productType).toBe("Cummins 100kVA Soundproof Generator");
+      expect(result.amount).toBe(1850000);
+      expect(mockNotionClient.updatePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_id: "deal_p1",
+          properties: expect.objectContaining({
+            Stage: { select: { name: "Proposal" } },
+            "Product Type": {
+              rich_text: [{ text: { content: "Cummins 100kVA Soundproof Generator" } }],
+            },
+            "Offer VAT Incl": { number: 1850000 },
+          }),
+        })
       );
     });
   });

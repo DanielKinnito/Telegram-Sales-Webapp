@@ -7,6 +7,12 @@
       "skillPath": "skills/code-review-and-quality/SKILL.md",
       "computedHash": "0667c7af98996c0bec4fb0eb444680bdbf1da1d6a3cfdf5dbe8cbd350d9d2752"
     },
+    "documentation-and-adrs": {
+      "source": "addyosmani/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/documentation-and-adrs/SKILL.md",
+      "computedHash": "2ed98ee303c23d228c76c7bfe6a5f0e5c0571df81670e5eb099f14929eac47e9"
+    },
     "spec-driven-development": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",

@@ -113,6 +113,88 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
     }
   });
 
+  // 3b. Update deal stage (e.g. Won, Lost)
+  router.patch("/:id/stage", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      let submitterName = `${telegramUser.firstName || ""} ${telegramUser.lastName || ""}`.trim();
+      if (salesRepsService) {
+        const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
+        if (caller?.fullName) {
+          submitterName = caller.fullName;
+        }
+      }
+
+      const { stage, reason, productType, offerAmount } = req.body || {};
+      if (!stage || typeof stage !== "string") {
+        return res.status(400).json({ error: "Validation Error: Stage is required." });
+      }
+
+      const updatedDeal = await dealsService.updateDealStage(dealId, {
+        stage,
+        reason: reason ? String(reason).trim() : undefined,
+        productType: productType ? String(productType).trim() : undefined,
+        offerAmount: offerAmount != null ? Number(offerAmount) : undefined,
+        updatedByTelegramId: telegramUser.id,
+        updatedByName: submitterName,
+      });
+
+      return res.status(200).json({ success: true, deal: updatedDeal });
+    } catch (err: any) {
+      if (err.message?.includes("Deal not found")) {
+        return res.status(404).json({ error: "Not Found", message: err.message });
+      }
+      return res.status(500).json({ error: err.message || "Failed to update deal stage", details: err.message });
+    }
+  });
+
+  // 3c. Submit Proposed Offer (Generator/Pump with VAT price)
+  router.post("/:id/proposed-offer", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      let submitterName = `${telegramUser.firstName || ""} ${telegramUser.lastName || ""}`.trim();
+      if (salesRepsService) {
+        const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
+        if (caller?.fullName) {
+          submitterName = caller.fullName;
+        }
+      }
+
+      const { productType, offerAmount, companyName } = req.body || {};
+      if (!productType || typeof productType !== "string" || !productType.trim()) {
+        return res.status(400).json({ error: "Validation Error: Equipment Type is required." });
+      }
+      if (offerAmount == null || isNaN(Number(offerAmount)) || Number(offerAmount) <= 0) {
+        return res.status(400).json({ error: "Validation Error: Valid offer amount is required." });
+      }
+
+      const updatedDeal = await dealsService.submitProposedOffer(dealId, {
+        productType: String(productType).trim(),
+        offerAmount: Number(offerAmount),
+        repTelegramId: telegramUser.id,
+        repName: submitterName,
+        companyName: companyName ? String(companyName).trim() : undefined,
+      });
+
+      return res.status(200).json({ success: true, deal: updatedDeal });
+    } catch (err: any) {
+      if (err.message?.includes("Deal not found")) {
+        return res.status(404).json({ error: "Not Found", message: err.message });
+      }
+      return res.status(500).json({ error: err.message || "Failed to submit proposed offer", details: err.message });
+    }
+  });
+
   // 4. List activities & progress notes for a deal / company
   router.get("/:id/activities", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {

@@ -18,6 +18,9 @@ export interface DealRecord {
   isCommission?: boolean | null;
   beneficiaryName?: string | null;
   beneficiaryPhone?: string | null;
+  productType?: string | null;
+  offerAmount?: number | null;
+  lostReason?: string | null;
 }
 
 export interface ActivityRecord {
@@ -117,9 +120,12 @@ export class DealsService {
           props?.["Name"]?.title?.[0]?.plain_text ||
           "Untitled Deal";
         const stage = props?.["Stage"]?.select?.name || "New";
-        const amount = props?.["Amount"]?.number ?? null;
+        const amount = props?.["Amount"]?.number ?? props?.["Offer VAT Incl"]?.number ?? null;
         const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
         const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
+        const productType = props?.["Product Type"]?.rich_text?.[0]?.plain_text ?? null;
+        const offerAmount = props?.["Offer VAT Incl"]?.number ?? amount;
+        const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? null;
 
         deals.push({
           pageId: page.id,
@@ -128,6 +134,9 @@ export class DealsService {
           amount,
           depositRef,
           proofUrl,
+          productType,
+          offerAmount,
+          lostReason,
         });
       }
     } catch (err: any) {
@@ -191,6 +200,9 @@ export class DealsService {
             isCommission,
             beneficiaryName,
             beneficiaryPhone,
+            productType: null,
+            offerAmount: null,
+            lostReason: null,
           });
         }
       }
@@ -215,9 +227,12 @@ export class DealsService {
         props?.["Name"]?.title?.[0]?.plain_text ||
         "Untitled Deal";
       const stage = props?.["Stage"]?.select?.name || "New";
-      const amount = props?.["Amount"]?.number ?? null;
+      const amount = props?.["Amount"]?.number ?? props?.["Offer VAT Incl"]?.number ?? null;
       const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
       const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
+      const productType = props?.["Product Type"]?.rich_text?.[0]?.plain_text ?? null;
+      const offerAmount = props?.["Offer VAT Incl"]?.number ?? amount;
+      const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? null;
 
       deals.push({
         pageId: page.id,
@@ -226,6 +241,9 @@ export class DealsService {
         amount,
         depositRef,
         proofUrl,
+        productType,
+        offerAmount,
+        lostReason,
       });
     }
 
@@ -246,9 +264,12 @@ export class DealsService {
         props?.["Company Name"]?.title?.[0]?.plain_text ||
         "Untitled Deal";
       const stage = props?.["Stage"]?.select?.name || "Proposal";
-      const amount = props?.["Amount"]?.number ?? null;
+      const amount = props?.["Amount"]?.number ?? props?.["Offer VAT Incl"]?.number ?? null;
       const depositRef = props?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null;
       const proofUrl = props?.["Payment Proof URL"]?.url ?? null;
+      const productType = props?.["Product Type"]?.rich_text?.[0]?.plain_text ?? null;
+      const offerAmount = props?.["Offer VAT Incl"]?.number ?? amount;
+      const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? null;
 
       return {
         pageId: page.id,
@@ -257,6 +278,9 @@ export class DealsService {
         amount,
         depositRef,
         proofUrl,
+        productType,
+        offerAmount,
+        lostReason,
       };
     } catch {
       throw new Error(`Deal not found: ${pageId}`);
@@ -447,6 +471,249 @@ export class DealsService {
       },
       managersNotified,
     };
+  }
+
+  /**
+   * Updates deal stage (e.g. 'Won', 'Lost') and records reason or offer if provided.
+   * Handles both Deals DB pages and Accounts DB pages resiliently.
+   */
+  public async updateDealStage(
+    dealId: string,
+    input: {
+      stage: string;
+      reason?: string | undefined;
+      productType?: string | undefined;
+      offerAmount?: number | undefined;
+      updatedByTelegramId?: number | string | undefined;
+      updatedByName?: string | undefined;
+    }
+  ): Promise<DealRecord> {
+    let targetPage: any;
+    try {
+      targetPage = await this.notionClient.retrievePage({ page_id: dealId });
+    } catch {
+      throw new Error(`Deal not found: ${dealId}`);
+    }
+
+    const targetDbId = targetPage.parent?.database_id?.replace(/-/g, "");
+    const accountsDbCleanId = env.NOTION_ACCOUNTS_DB_ID?.replace(/-/g, "");
+    const isAccountPage = Boolean(
+      (targetDbId && accountsDbCleanId && targetDbId === accountsDbCleanId) ||
+      (targetPage.properties?.["TIN Number"] && !targetPage.properties?.["Stage"])
+    );
+
+    let dealPageId = dealId;
+    let dealTitle =
+      targetPage.properties?.["Deal Title"]?.title?.[0]?.plain_text ||
+      targetPage.properties?.["Name"]?.title?.[0]?.plain_text ||
+      targetPage.properties?.["Company Name"]?.title?.[0]?.plain_text ||
+      "Client Order";
+    let dealAmount: number | null = targetPage.properties?.["Amount"]?.number ?? (input.offerAmount ?? null);
+    let productType = targetPage.properties?.["Product Type"]?.rich_text?.[0]?.plain_text ?? (input.productType ?? null);
+    let lostReason = targetPage.properties?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? (input.reason ?? null);
+
+    const updateProps: Record<string, any> = {
+      "Stage": {
+        select: { name: input.stage },
+      },
+    };
+
+    if (input.reason) {
+      updateProps["Lost Reason"] = {
+        rich_text: [{ text: { content: input.reason.trim() } }],
+      };
+      lostReason = input.reason.trim();
+    }
+
+    if (input.productType) {
+      updateProps["Product Type"] = {
+        rich_text: [{ text: { content: input.productType.trim() } }],
+      };
+      productType = input.productType.trim();
+    }
+
+    if (input.offerAmount != null) {
+      updateProps["Offer VAT Incl"] = {
+        number: input.offerAmount,
+      };
+      updateProps["Amount"] = {
+        number: input.offerAmount,
+      };
+      dealAmount = input.offerAmount;
+    }
+
+    if (isAccountPage) {
+      const cleanCompanyName = dealTitle.replace(/ Order$/, "");
+      const expectedDealTitle = `${cleanCompanyName} Order`;
+
+      let linkedDealsRes: { results?: any[] } = {};
+      try {
+        linkedDealsRes = (await this.notionClient.queryDatabase(this.dealsDbId, {
+          filter: {
+            or: [
+              {
+                property: "Account Name",
+                rich_text: { equals: cleanCompanyName },
+              },
+              {
+                property: "Deal Title",
+                title: { equals: expectedDealTitle },
+              },
+            ],
+          },
+        })) || {};
+      } catch {
+        linkedDealsRes = { results: [] };
+      }
+
+      if (linkedDealsRes.results && linkedDealsRes.results.length > 0) {
+        const existingDeal = linkedDealsRes.results[0];
+        dealPageId = existingDeal.id;
+        await this.notionClient.updatePage({
+          page_id: dealPageId,
+          properties: updateProps,
+        });
+      } else {
+        const repName = input.updatedByName || "Sales Representative";
+        const newDealProps: Record<string, any> = {
+          "Deal Title": {
+            title: [{ text: { content: expectedDealTitle } }],
+          },
+          "Account Name": {
+            rich_text: [{ text: { content: cleanCompanyName } }],
+          },
+          "Rep Name": {
+            rich_text: [{ text: { content: repName } }],
+          },
+          ...updateProps,
+        };
+
+        const newDealPage = await this.notionClient.createPage({
+          parent: { database_id: this.dealsDbId },
+          properties: newDealProps,
+        });
+        dealPageId = newDealPage.id;
+      }
+    } else {
+      await this.notionClient.updatePage({
+        page_id: dealPageId,
+        properties: updateProps,
+      });
+    }
+
+    // Also record a Sales Log entry in CRM timeline
+    try {
+      const today = new Date().toISOString().split("T")[0]!;
+      let logTitle = `Deal Status: ${input.stage}`;
+      let logNote = `Deal marked as ${input.stage}.`;
+
+      if (input.stage === "Won") {
+        logTitle = "Deal Completed & Won";
+        logNote = `Deal marked as Completed & Won${input.offerAmount ? ` for ${input.offerAmount.toLocaleString()} ETB` : ""}.`;
+      } else if (input.stage === "Lost") {
+        logTitle = "Deal Lost";
+        logNote = `Deal marked as Lost.${input.reason ? ` Reason: ${input.reason}` : ""}`;
+      }
+
+      await this.notionClient.createPage({
+        parent: { database_id: this.salesLogsDbId },
+        properties: {
+          "Log Title / ID": {
+            title: [{ text: { content: logTitle } }],
+          },
+          "Interaction Type": {
+            select: { name: "Note" },
+          },
+          "Activity Date": {
+            date: { start: today },
+          },
+          "Note Content": {
+            rich_text: [{ text: { content: logNote } }],
+          },
+          "Company Name": {
+            rich_text: [{ text: { content: dealTitle.replace(/ Order$/, "") } }],
+          },
+        },
+      });
+    } catch (logErr: any) {
+      console.warn("Could not create sales log for stage update:", logErr.message);
+    }
+
+    return {
+      pageId: dealPageId,
+      title: dealTitle,
+      stage: input.stage,
+      amount: dealAmount,
+      depositRef: targetPage.properties?.["Deposit Ref #"]?.rich_text?.[0]?.plain_text ?? null,
+      proofUrl: targetPage.properties?.["Payment Proof URL"]?.url ?? null,
+      productType,
+      offerAmount: dealAmount,
+      lostReason,
+    };
+  }
+
+  /**
+   * Submit Proposed Offer for equipment (Generator/Pump) with VAT-inclusive pricing.
+   */
+  public async submitProposedOffer(
+    dealId: string,
+    input: {
+      productType: string;
+      offerAmount: number;
+      repTelegramId?: number | string | undefined;
+      repName?: string | undefined;
+      companyName?: string | undefined;
+    }
+  ): Promise<DealRecord> {
+    if (!input.productType || input.productType.trim().length === 0) {
+      throw new Error("Validation Error: Type of Generator / Pump is required.");
+    }
+    if (input.offerAmount == null || isNaN(input.offerAmount) || input.offerAmount <= 0) {
+      throw new Error("Validation Error: A valid offer amount including VAT is required.");
+    }
+
+    const updated = await this.updateDealStage(dealId, {
+      stage: "Proposal",
+      productType: input.productType.trim(),
+      offerAmount: input.offerAmount,
+      updatedByTelegramId: input.repTelegramId,
+      updatedByName: input.repName,
+    });
+
+    // Also record a detailed timeline log
+    try {
+      const today = new Date().toISOString().split("T")[0]!;
+      await this.notionClient.createPage({
+        parent: { database_id: this.salesLogsDbId },
+        properties: {
+          "Log Title / ID": {
+            title: [{ text: { content: `Proposed Offer: ${input.productType.trim()}` } }],
+          },
+          "Interaction Type": {
+            select: { name: "Meeting" },
+          },
+          "Activity Date": {
+            date: { start: today },
+          },
+          "Note Content": {
+            rich_text: [
+              {
+                text: {
+                  content: `Official offer submitted: ${input.productType.trim()} at ${input.offerAmount.toLocaleString()} ETB (including VAT).`,
+                },
+              },
+            ],
+          },
+          "Company Name": {
+            rich_text: [{ text: { content: input.companyName || updated.title.replace(/ Order$/, "") } }],
+          },
+        },
+      });
+    } catch (err: any) {
+      console.warn("Could not log proposed offer:", err.message);
+    }
+
+    return updated;
   }
 
   /**

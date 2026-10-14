@@ -71,15 +71,29 @@ export function getTelegramInitData(): string {
   if (typeof window !== 'undefined') {
     // 1. Check official Telegram WebApp SDK
     const sdkRaw = (window as any).Telegram?.WebApp?.initData;
-    if (sdkRaw && sdkRaw.length > 10) return sdkRaw;
+    if (sdkRaw && sdkRaw.length > 10) {
+      try {
+        localStorage.setItem('tg_init_data', sdkRaw);
+        sessionStorage.setItem('tg_init_data', sdkRaw);
+      } catch {}
+      return sdkRaw;
+    }
 
     // 2. Check URL parameters fallback
     const { initData } = extractUrlTelegramData();
-    if (initData && initData.length > 10) return initData;
+    if (initData && initData.length > 10) {
+      try {
+        localStorage.setItem('tg_init_data', initData);
+        sessionStorage.setItem('tg_init_data', initData);
+      } catch {}
+      return initData;
+    }
 
-    // 3. Check sessionStorage cache
-    const cached = sessionStorage.getItem('tg_init_data');
-    if (cached && cached.length > 10) return cached;
+    // 3. Check persistent localStorage & sessionStorage cache
+    try {
+      const cached = localStorage.getItem('tg_init_data') || sessionStorage.getItem('tg_init_data');
+      if (cached && cached.length > 10) return cached;
+    } catch {}
   }
 
   // Only use Tester One mock in local dev environment
@@ -92,6 +106,21 @@ export function getTelegramInitData(): string {
 
 export function getTelegramUser(): TelegramUser {
   if (typeof window !== 'undefined') {
+    // 0. Check cached registered Notion CRM rep profile first
+    try {
+      const cachedRepStr = localStorage.getItem('crm_rep_profile');
+      if (cachedRepStr) {
+        const cachedRep = JSON.parse(cachedRepStr);
+        if (cachedRep && cachedRep.fullName) {
+          return {
+            id: cachedRep.telegramId || 0,
+            firstName: cachedRep.fullName,
+            lastName: undefined,
+          };
+        }
+      }
+    } catch {}
+
     // 1. Check official Telegram WebApp SDK
     const u = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
     if (u && u.id) {
@@ -102,6 +131,7 @@ export function getTelegramUser(): TelegramUser {
         username: u.username || undefined,
       };
       try {
+        localStorage.setItem('tg_user', JSON.stringify(userObj));
         sessionStorage.setItem('tg_user', JSON.stringify(userObj));
       } catch {}
       return userObj;
@@ -111,15 +141,19 @@ export function getTelegramUser(): TelegramUser {
     const { user: parsedUser, initData } = extractUrlTelegramData();
     if (parsedUser && parsedUser.id) {
       try {
+        localStorage.setItem('tg_user', JSON.stringify(parsedUser));
         sessionStorage.setItem('tg_user', JSON.stringify(parsedUser));
-        if (initData) sessionStorage.setItem('tg_init_data', initData);
+        if (initData) {
+          localStorage.setItem('tg_init_data', initData);
+          sessionStorage.setItem('tg_init_data', initData);
+        }
       } catch {}
       return parsedUser;
     }
 
-    // 3. Check sessionStorage
+    // 3. Check storage
     try {
-      const cached = sessionStorage.getItem('tg_user');
+      const cached = localStorage.getItem('tg_user') || sessionStorage.getItem('tg_user');
       if (cached) {
         return JSON.parse(cached);
       }
