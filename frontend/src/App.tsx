@@ -9,12 +9,57 @@ import { api, type AuthMeResponse } from './lib/api';
 import { ShieldAlert, Clock, Loader2, Send } from 'lucide-react';
 
 export function App() {
-  const [authStatus, setAuthStatus] = useState<'checking' | 'authorized' | 'pending' | 'unauthorized'>('checking');
-  const [user, setUser] = useState(getTelegramUser());
-  const [activeRole, setActiveRole] = useState<'sales_rep' | 'front_desk'>('sales_rep');
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authorized' | 'pending' | 'unauthorized'>(() => {
+    try {
+      const cached = localStorage.getItem('crm_rep_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.fullName) return 'authorized';
+      }
+    } catch {}
+    return 'checking';
+  });
+
+  const [user, setUser] = useState(() => {
+    try {
+      const cached = localStorage.getItem('crm_rep_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.fullName) {
+          return {
+            id: parsed.telegramId || 0,
+            firstName: parsed.fullName,
+            lastName: undefined,
+          };
+        }
+      }
+    } catch {}
+    return getTelegramUser();
+  });
+
+  const [activeRole, setActiveRole] = useState<'sales_rep' | 'front_desk'>(() => {
+    try {
+      const cached = localStorage.getItem('crm_rep_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.role === 'Front Desk') return 'front_desk';
+      }
+    } catch {}
+    return 'sales_rep';
+  });
+
   const [activeTab, setActiveTab] = useState<TabType>('tin_lookup');
   const [canSwitchRole, setCanSwitchRole] = useState(false);
-  const [repRoleName, setRepRoleName] = useState('Sales Rep');
+  const [repRoleName, setRepRoleName] = useState(() => {
+    try {
+      const cached = localStorage.getItem('crm_rep_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.role) return parsed.role;
+      }
+    } catch {}
+    return 'Sales Rep';
+  });
 
   // Theme State: Default to Light mode primarily
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -100,7 +145,8 @@ export function App() {
               }
             }
           } catch {}
-          setAuthStatus('unauthorized');
+          // Only switch to unauthorized if never authorized to prevent kicking active users during network blips
+          setAuthStatus((prev) => (prev === 'authorized' ? 'authorized' : 'unauthorized'));
         }
       });
   };

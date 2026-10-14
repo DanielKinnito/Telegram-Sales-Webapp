@@ -203,3 +203,19 @@ export function expandTelegramViewport() {
     }
   }
 }
+
+export function setTelegramClosingConfirmation(enabled: boolean) {
+  if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+    try {
+      const webApp = (window as any).Telegram.WebApp;
+      if (enabled) {
+        webApp.enableClosingConfirmation?.();
+      } else {
+        webApp.disableClosingConfirmation?.();
+      }
+    } catch {
+      // safe fallback
+    }
+  }
+}
+

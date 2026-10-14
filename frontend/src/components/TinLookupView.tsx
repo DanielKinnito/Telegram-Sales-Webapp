@@ -1,26 +1,138 @@
-import { useState } from 'react';
-import { Search, CheckCircle2, AlertTriangle, Building2, Plus, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, CheckCircle2, AlertTriangle, Building2, Plus, ArrowRight, Loader2, ShieldCheck, Trash2 } from 'lucide-react';
 import { api, type CheckTinResponse, type RegisterLeadResponse } from '../lib/api';
-import { triggerHaptic } from '../lib/telegram';
+import { triggerHaptic, setTelegramClosingConfirmation } from '../lib/telegram';
+
+const DRAFT_STORAGE_KEY = 'crm_tin_lead_draft';
+
+interface LeadFormDraft {
+  tin: string;
+  showRegisterForm: boolean;
+  checkResult: CheckTinResponse | null;
+  companyName: string;
+  address: string;
+  industry: string;
+  contactPerson: string;
+  contactPhone: string;
+  isCommission: boolean;
+  beneficiaryName: string;
+  beneficiaryPhone: string;
+}
+
+function loadSavedDraft(): Partial<LeadFormDraft> {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
 
 export const TinLookupView: React.FC = () => {
-  const [tin, setTin] = useState('');
+  const [savedDraft] = useState<Partial<LeadFormDraft>>(() => loadSavedDraft());
+  const [draftRestored, setDraftRestored] = useState<boolean>(() => {
+    const d = loadSavedDraft();
+    return Boolean(d.tin || d.companyName || d.contactPerson || d.showRegisterForm);
+  });
+
+  const [tin, setTin] = useState(savedDraft.tin || '');
   const [isChecking, setIsChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<CheckTinResponse | null>(null);
+  const [checkResult, setCheckResult] = useState<CheckTinResponse | null>(savedDraft.checkResult || null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Registration Form State
-  const [showRegisterForm, setShowRegisterForm] = useState(false);
-  const [companyName, setCompanyName] = useState('');
-  const [address, setAddress] = useState('');
-  const [industry, setIndustry] = useState('Manufacturing');
-  const [contactPerson, setContactPerson] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [isCommission, setIsCommission] = useState(false);
-  const [beneficiaryName, setBeneficiaryName] = useState('');
-  const [beneficiaryPhone, setBeneficiaryPhone] = useState('');
+  const [showRegisterForm, setShowRegisterForm] = useState(savedDraft.showRegisterForm || false);
+  const [companyName, setCompanyName] = useState(savedDraft.companyName || '');
+  const [address, setAddress] = useState(savedDraft.address || '');
+  const [industry, setIndustry] = useState(savedDraft.industry || 'Manufacturing');
+  const [contactPerson, setContactPerson] = useState(savedDraft.contactPerson || '');
+  const [contactPhone, setContactPhone] = useState(savedDraft.contactPhone || '');
+  const [isCommission, setIsCommission] = useState(savedDraft.isCommission || false);
+  const [beneficiaryName, setBeneficiaryName] = useState(savedDraft.beneficiaryName || '');
+  const [beneficiaryPhone, setBeneficiaryPhone] = useState(savedDraft.beneficiaryPhone || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registeredAccounts, setRegisteredAccounts] = useState<RegisterLeadResponse['account'][]>([]);
+
+  // Real-time localStorage auto-save & Telegram swipe-down exit protection
+  useEffect(() => {
+    const hasUnsavedContent = Boolean(
+      tin.trim() ||
+      companyName.trim() ||
+      address.trim() ||
+      contactPerson.trim() ||
+      contactPhone.trim() ||
+      beneficiaryName.trim() ||
+      beneficiaryPhone.trim() ||
+      showRegisterForm
+    );
+
+    if (hasUnsavedContent) {
+      const draft: LeadFormDraft = {
+        tin,
+        showRegisterForm,
+        checkResult,
+        companyName,
+        address,
+        industry,
+        contactPerson,
+        contactPhone,
+        isCommission,
+        beneficiaryName,
+        beneficiaryPhone,
+      };
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch {}
+
+      setTelegramClosingConfirmation(true);
+    } else {
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {}
+      setTelegramClosingConfirmation(false);
+    }
+  }, [
+    tin,
+    showRegisterForm,
+    checkResult,
+    companyName,
+    address,
+    industry,
+    contactPerson,
+    contactPhone,
+    isCommission,
+    beneficiaryName,
+    beneficiaryPhone,
+  ]);
+
+  // Clean exit protection on component unmount
+  useEffect(() => {
+    return () => {
+      setTelegramClosingConfirmation(false);
+    };
+  }, []);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {}
+    setTin('');
+    setCheckResult(null);
+    setShowRegisterForm(false);
+    setCompanyName('');
+    setAddress('');
+    setIndustry('Manufacturing');
+    setContactPerson('');
+    setContactPhone('');
+    setIsCommission(false);
+    setBeneficiaryName('');
+    setBeneficiaryPhone('');
+    setDraftRestored(false);
+    setErrorMessage(null);
+    setTelegramClosingConfirmation(false);
+    triggerHaptic('light');
+  };
 
   const handleTinChange = (val: string) => {
     // Only allow digits up to 10
@@ -88,6 +200,9 @@ export const TinLookupView: React.FC = () => {
         beneficiaryPhone: isCommission ? beneficiaryPhone.trim() || undefined : undefined,
       });
 
+      // Clear draft on successful submission
+      clearDraft();
+
       triggerHaptic('success');
       setRegisteredAccounts((prev) => [res.account, ...prev]);
       setShowRegisterForm(false);
@@ -100,13 +215,6 @@ export const TinLookupView: React.FC = () => {
           assignedDate: res.account.assignedDate,
         },
       });
-      setCompanyName('');
-      setAddress('');
-      setContactPerson('');
-      setContactPhone('');
-      setIsCommission(false);
-      setBeneficiaryName('');
-      setBeneficiaryPhone('');
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed');
       triggerHaptic('error');
@@ -130,6 +238,26 @@ export const TinLookupView: React.FC = () => {
           Verify 10-digit Ethiopian Taxpayer Identification Numbers before onboarding clients. Prevents lead overlap between sales reps.
         </p>
       </div>
+
+      {/* Draft Recovery Notification Banner */}
+      {draftRestored && (
+        <div className="p-3 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/40 text-xs flex items-center justify-between space-x-2 text-[#0071e3] dark:text-blue-300 animate-in fade-in shadow-xs">
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-[#0071e3] shrink-0 animate-pulse" />
+            <span className="font-semibold truncate">
+              Auto-saved client draft restored.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearDraft}
+            className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c1c1e] text-[11px] font-semibold border border-blue-200 dark:border-blue-700/60 text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/5 dark:hover:bg-white/5 transition-all shrink-0 apple-press flex items-center space-x-1"
+          >
+            <Trash2 className="w-3 h-3 text-rose-500" />
+            <span>Discard</span>
+          </button>
+        </div>
+      )}
 
       {/* TIN Lookup Input Card */}
       <div className="p-5 rounded-2xl apple-glass-card space-y-4">
