@@ -5,23 +5,25 @@ async function main() {
   const client = getNotionClient();
   const parentId = process.env.NOTION_PARENT_PAGE_ID!;
 
-  console.log("Re-ordering dashboard blocks to place cards at the TOP of the Notion page...");
+  console.log("Upgrading dashboard cards with direct CLICKABLE links to all tables...");
 
-  // 1. Get current blocks
+  // 1. Fetch current blocks on parent page
   const blocksRes: any = await (client.rawClient as any).blocks.children.list({ block_id: parentId });
   const blocks = blocksRes.results;
 
-  // Identify blocks 8 through 16 to delete
-  for (let i = 8; i < blocks.length; i++) {
-    try {
-      await (client.rawClient as any).blocks.delete({ block_id: blocks[i].id });
-      console.log(`Deleted block ${blocks[i].id}`);
-    } catch (e: any) {
-      console.warn(`Could not delete block:`, e.message);
+  // Blocks 1 to 9 are the dashboard blocks we created earlier. Delete them to replace with 100% clickable cards.
+  for (let i = 1; i <= 9; i++) {
+    if (blocks[i] && blocks[i].type !== "child_database") {
+      try {
+        await (client.rawClient as any).blocks.delete({ block_id: blocks[i].id });
+        console.log(`Removed previous block ${blocks[i].id} (${blocks[i].type})`);
+      } catch (err: any) {
+        console.warn(`Could not delete block:`, err.message);
+      }
     }
   }
 
-  // 2. Fetch counts for badges
+  // 2. Fetch live counts
   let dealsCount = 0;
   let accountsCount = 0;
   let repsCount = 0;
@@ -45,8 +47,15 @@ async function main() {
     logsCount = lRes.results.length;
   } catch {}
 
-  // 3. Construct modern cards
-  const topBlocks: any[] = [
+  const dealsUrl = `https://www.notion.so/${env.NOTION_DEALS_DB_ID.replace(/-/g, "")}`;
+  const accountsUrl = `https://www.notion.so/${env.NOTION_ACCOUNTS_DB_ID.replace(/-/g, "")}`;
+  const repsUrl = `https://www.notion.so/${env.NOTION_SALES_REPS_DB_ID.replace(/-/g, "")}`;
+  const logsUrl = `https://www.notion.so/${env.NOTION_SALES_LOGS_DB_ID.replace(/-/g, "")}`;
+  const queueUrl = `https://www.notion.so/${env.NOTION_QUEUE_DB_ID.replace(/-/g, "")}`;
+  const contactsUrl = `https://www.notion.so/${env.NOTION_CONTACTS_DB_ID.replace(/-/g, "")}`;
+
+  // 3. Build fully clickable cards & link_to_page components
+  const clickableDashboardBlocks: any[] = [
     // Welcome Callout Banner
     {
       type: "callout",
@@ -61,7 +70,7 @@ async function main() {
             type: "text",
             text: {
               content:
-                "Real-time relational datastore integrated with Telegram Mini App & Ethiopian TIN Conflict Engine. Tap any card below to inspect records.",
+                "Click on any of the cards below to jump directly into the full database table view with all columns, filters, and records.",
             },
             annotations: { italic: true, color: "gray" },
           },
@@ -74,14 +83,14 @@ async function main() {
     // Spacer
     { type: "paragraph", paragraph: { rich_text: [] } },
 
-    // Section 1: Dashboard Navigation
+    // Section Title
     {
       type: "heading_2",
       heading_2: {
         rich_text: [
           {
             type: "text",
-            text: { content: "📱 Quick Navigation Cards" },
+            text: { content: "📱 Quick Navigation Cards (Click to Open)" },
             annotations: { bold: true },
           },
         ],
@@ -89,12 +98,12 @@ async function main() {
     },
     { type: "divider", divider: {} },
 
-    // Row 1: 3 Columns of Cards (Work / School / Personal style from Screenshot 4)
+    // Row 1: 3 Columns with clickable cards & native Notion link_to_page blocks
     {
       type: "column_list",
       column_list: {
         children: [
-          // Card 1: Deals & Pipeline (Blue / Work)
+          // Column 1: Deals & Pipeline
           {
             type: "column",
             column: {
@@ -105,28 +114,36 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Deals & Pipeline\n" },
+                        text: { content: "Deals & Pipeline\n", link: { url: dealsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${dealsCount} active deals\n` },
+                        text: { content: `${dealsCount} active deals\n`, link: { url: dealsUrl } },
                         annotations: { color: "blue", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Offers, generator quotes & won deals" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Deals Table", link: { url: dealsUrl } },
+                        annotations: { underline: true, color: "blue", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "💼" },
                     color: "gray_background",
                   },
                 },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_DEALS_DB_ID,
+                  },
+                },
               ],
             },
           },
-          // Card 2: Accounts & Clients (Teal / School)
+
+          // Column 2: Accounts & Clients
           {
             type: "column",
             column: {
@@ -137,28 +154,36 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Accounts & Clients\n" },
+                        text: { content: "Accounts & Clients\n", link: { url: accountsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${accountsCount} registered companies\n` },
+                        text: { content: `${accountsCount} registered companies\n`, link: { url: accountsUrl } },
                         annotations: { color: "purple", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Verified Ethiopian TINs & owners" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Accounts Table", link: { url: accountsUrl } },
+                        annotations: { underline: true, color: "purple", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "🏢" },
                     color: "gray_background",
                   },
                 },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_ACCOUNTS_DB_ID,
+                  },
+                },
               ],
             },
           },
-          // Card 3: Sales Representatives (Purple / Personal)
+
+          // Column 3: Sales Representatives
           {
             type: "column",
             column: {
@@ -169,22 +194,29 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Sales Team\n" },
+                        text: { content: "Sales Team\n", link: { url: repsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${repsCount} active members\n` },
+                        text: { content: `${repsCount} active members\n`, link: { url: repsUrl } },
                         annotations: { color: "green", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Sales reps, front desk & managers" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Sales Reps Table", link: { url: repsUrl } },
+                        annotations: { underline: true, color: "green", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "👥" },
                     color: "gray_background",
+                  },
+                },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_SALES_REPS_DB_ID,
                   },
                 },
               ],
@@ -194,12 +226,12 @@ async function main() {
       },
     },
 
-    // Row 2: 3 Columns of Cards (Projects / Wiki / Docs style from Screenshot 4)
+    // Row 2: 3 Columns with clickable cards & native Notion link_to_page blocks
     {
       type: "column_list",
       column_list: {
         children: [
-          // Card 4: Sales Logs (Orange / Projects)
+          // Column 4: Sales Activity Logs
           {
             type: "column",
             column: {
@@ -210,28 +242,36 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Activity Logs\n" },
+                        text: { content: "Activity Logs\n", link: { url: logsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${logsCount} activity logs\n` },
+                        text: { content: `${logsCount} activity logs\n`, link: { url: logsUrl } },
                         annotations: { color: "orange", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Meeting notes & scheduled calls" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Activity Logs Table", link: { url: logsUrl } },
+                        annotations: { underline: true, color: "orange", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "📝" },
                     color: "gray_background",
                   },
                 },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_SALES_LOGS_DB_ID,
+                  },
+                },
               ],
             },
           },
-          // Card 5: Rotational Queue (Red / Wiki)
+
+          // Column 5: Rotational Walk-in Queue
           {
             type: "column",
             column: {
@@ -242,28 +282,36 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Rotational Queue\n" },
+                        text: { content: "Rotational Queue\n", link: { url: queueUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Front desk engine\n" },
+                        text: { content: "Front desk engine\n", link: { url: queueUrl } },
                         annotations: { color: "red", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Automated round-robin distribution" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Queue Table", link: { url: queueUrl } },
+                        annotations: { underline: true, color: "red", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "🛎️" },
                     color: "gray_background",
                   },
                 },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_QUEUE_DB_ID,
+                  },
+                },
               ],
             },
           },
-          // Card 6: Contacts Directory (Yellow / Docs)
+
+          // Column 6: Contacts Directory
           {
             type: "column",
             column: {
@@ -274,22 +322,29 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Contacts Directory\n" },
+                        text: { content: "Contacts & Brokers\n", link: { url: contactsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Stakeholder phonebook\n" },
+                        text: { content: "Key stakeholders\n", link: { url: contactsUrl } },
                         annotations: { color: "yellow", bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Key contacts & commission beneficiaries" },
-                        annotations: { italic: true, color: "gray" },
+                        text: { content: "↗ Open Contacts Table", link: { url: contactsUrl } },
+                        annotations: { underline: true, color: "yellow", bold: true },
                       },
                     ],
                     icon: { type: "emoji", emoji: "📱" },
                     color: "gray_background",
+                  },
+                },
+                {
+                  type: "link_to_page",
+                  link_to_page: {
+                    type: "database_id",
+                    database_id: env.NOTION_CONTACTS_DB_ID,
                   },
                 },
               ],
@@ -302,14 +357,14 @@ async function main() {
     // Spacer
     { type: "paragraph", paragraph: { rich_text: [] } },
 
-    // Section 2: Databases
+    // Section 2 Header: Databases
     {
       type: "heading_2",
       heading_2: {
         rich_text: [
           {
             type: "text",
-            text: { content: "🗄️ Relational Databases & Datastores" },
+            text: { content: "🗄️ Relational CRM Databases" },
             annotations: { bold: true },
           },
         ],
@@ -318,15 +373,15 @@ async function main() {
     { type: "divider", divider: {} },
   ];
 
-  // Insert before the databases (after block 0)
+  // Append right after the very first paragraph block
   const topBlockId = blocks[0].id;
   await (client.rawClient as any).blocks.children.append({
     block_id: parentId,
     after: topBlockId,
-    children: topBlocks,
+    children: clickableDashboardBlocks,
   });
 
-  console.log("🎉 Successfully positioned aesthetic cards and dashboard at the TOP of the Notion page!");
+  console.log("🎉 Successfully added 100% clickable navigation cards and link_to_page blocks to Notion!");
 }
 
 main().catch(console.error);
