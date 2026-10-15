@@ -3,7 +3,7 @@ import { env } from "../../config/env.js";
 import { getNotionClient } from "../notion/notionClient.js";
 import { SalesRepsService } from "../notion/salesRepsService.js";
 import { OnboardingController } from "./onboarding.js";
-import type { ReportsService } from "../reports/reportsService.js";
+import { ReportsService } from "../reports/reportsService.js";
 
 export interface CreateBotOptions {
   token?: string | undefined;
@@ -21,9 +21,19 @@ export function parseManagerChatIds(raw?: string): number[] {
     .filter((id) => !isNaN(id));
 }
 
+let registeredReportsService: ReportsService | null = null;
+
+export function setBotReportsService(service: ReportsService) {
+  registeredReportsService = service;
+}
+
 export function createBot(options: CreateBotOptions = {}) {
   const token = options.token || env.TELEGRAM_BOT_TOKEN;
   const bot = new Bot(token);
+
+  if (options.reportsService) {
+    registeredReportsService = options.reportsService;
+  }
 
   const salesRepsService =
     options.salesRepsService ||
@@ -81,14 +91,34 @@ export function createBot(options: CreateBotOptions = {}) {
       return;
     }
 
-    if (!options.reportsService) {
+    let activeReportsService = options.reportsService || registeredReportsService;
+    if (!activeReportsService) {
+      try {
+        activeReportsService = new ReportsService({
+          notionClient: getNotionClient(),
+          salesRepsService,
+          reportsDbId: env.NOTION_REPORTS_DB_ID,
+          dealsDbId: env.NOTION_DEALS_DB_ID,
+          accountsDbId: env.NOTION_ACCOUNTS_DB_ID,
+          salesLogsDbId: env.NOTION_SALES_LOGS_DB_ID,
+          queueDbId: env.NOTION_QUEUE_DB_ID,
+          managerChatIds,
+          bot,
+        });
+        registeredReportsService = activeReportsService;
+      } catch (err: any) {
+        console.error("Failed to initialize ReportsService on demand:", err);
+      }
+    }
+
+    if (!activeReportsService) {
       await ctx.reply("Reports service is currently initializing. Please try again shortly.");
       return;
     }
 
     await ctx.reply("Compiling Weekly Executive Sales Performance Report from Notion CRM datastore...");
     try {
-      const res = await options.reportsService.generateWeeklyReport({ triggerSource: "bot" });
+      const res = await activeReportsService.generateWeeklyReport({ triggerSource: "bot" });
       await ctx.reply(
         `Weekly Executive Sales Performance Report Compiled\n\n` +
         `• Period: ${res.periodString}\n` +
@@ -136,6 +166,9 @@ export function createBot(options: CreateBotOptions = {}) {
 let botInstance: ReturnType<typeof createBot> | null = null;
 
 export function getBot(options?: CreateBotOptions) {
+  if (options?.reportsService) {
+    registeredReportsService = options.reportsService;
+  }
   if (!botInstance) {
     botInstance = createBot(options);
   }

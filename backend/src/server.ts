@@ -1,6 +1,6 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
-import { getBot, parseManagerChatIds } from "./modules/bot/bot.js";
+import { getBot, parseManagerChatIds, setBotReportsService } from "./modules/bot/bot.js";
 import { getTinCache } from "./modules/leads/tinCache.js";
 import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
@@ -38,6 +38,8 @@ if (env.NODE_ENV !== "test") {
     queueDbId: env.NOTION_QUEUE_DB_ID,
     managerChatIds,
   });
+
+  setBotReportsService(reportsService);
 
   const bot = getBot({
     salesRepsService,
