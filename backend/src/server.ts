@@ -1,6 +1,12 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
-import { getBot, parseManagerChatIds, setBotReportsService } from "./modules/bot/bot.js";
+import {
+  getBot,
+  parseManagerChatIds,
+  setBotReportsService,
+  DEFAULT_BOT_COMMANDS,
+  MANAGER_BOT_COMMANDS,
+} from "./modules/bot/bot.js";
 import { getTinCache } from "./modules/leads/tinCache.js";
 import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
@@ -51,14 +57,15 @@ if (env.NODE_ENV !== "test") {
   bot.start({
     onStart: (info) => {
       console.log(`🤖 GrammY bot @${info.username} listening for onboarding & notifications`);
-      bot.api.setMyCommands([
-        { command: "start", description: "Check access & launch CRM" },
-        { command: "app", description: "Open Sales CRM Mini App" },
-        { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
-        { command: "help", description: "Show usage commands" },
-      ]).catch((err) => {
-        console.warn("⚠️ Could not update Telegram bot commands menu:", err.message);
+      // 1. Default commands for everyone (sales reps, front desk, pending, guests) - strictly hides /weekly_report
+      bot.api.setMyCommands(DEFAULT_BOT_COMMANDS, { scope: { type: "default" } }).catch((err) => {
+        console.warn("⚠️ Could not update default Telegram bot commands menu:", err.message);
       });
+
+      // 2. Scoped manager commands - only visible to authorized Executive Managers
+      for (const mgrId of managerChatIds) {
+        bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
+      }
     },
   }).catch((err) => {
     console.error("❌ Failed to launch Telegram bot:", err);

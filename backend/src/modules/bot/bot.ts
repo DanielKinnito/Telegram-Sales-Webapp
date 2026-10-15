@@ -27,6 +27,19 @@ export function setBotReportsService(service: ReportsService) {
   registeredReportsService = service;
 }
 
+export const DEFAULT_BOT_COMMANDS = [
+  { command: "start", description: "Check access & launch CRM" },
+  { command: "app", description: "Open Sales CRM Mini App" },
+  { command: "help", description: "Show usage commands" },
+];
+
+export const MANAGER_BOT_COMMANDS = [
+  { command: "start", description: "Check access & launch CRM" },
+  { command: "app", description: "Open Sales CRM Mini App" },
+  { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
+  { command: "help", description: "Show usage commands" },
+];
+
 export function createBot(options: CreateBotOptions = {}) {
   const token = options.token || env.TELEGRAM_BOT_TOKEN;
   const bot = new Bot(token);
@@ -52,6 +65,32 @@ export function createBot(options: CreateBotOptions = {}) {
 
   // 1. /start command
   bot.command("start", async (ctx) => {
+    const userId = ctx.from?.id;
+    if (userId) {
+      let isManager = managerChatIds.includes(userId);
+      if (!isManager) {
+        try {
+          const rep = await salesRepsService.findSalesRepByTelegramId(userId);
+          if (rep && rep.status === "Active" && rep.role === "Manager") {
+            isManager = true;
+          }
+        } catch {}
+      }
+
+      if (isManager) {
+        await ctx.api
+          .setMyCommands(MANAGER_BOT_COMMANDS, {
+            scope: { type: "chat", chat_id: userId },
+          })
+          .catch(() => {});
+      } else {
+        await ctx.api
+          .deleteMyCommands({
+            scope: { type: "chat", chat_id: userId },
+          })
+          .catch(() => {});
+      }
+    }
     await controller.handleStart(ctx);
   });
 
@@ -136,13 +175,29 @@ export function createBot(options: CreateBotOptions = {}) {
 
   // 4. /help command
   bot.command("help", async (ctx) => {
-    await ctx.reply(
+    const userId = ctx.from?.id;
+    let isManager = false;
+    if (userId) {
+      isManager = managerChatIds.includes(userId);
+      if (!isManager) {
+        try {
+          const rep = await salesRepsService.findSalesRepByTelegramId(userId);
+          if (rep && rep.status === "Active" && rep.role === "Manager") {
+            isManager = true;
+          }
+        } catch {}
+      }
+    }
+
+    let text =
       "📌 Sales CRM Bot Commands:\n\n" +
-        "/start - Check account status & registration\n" +
-        "/app - Open the Sales CRM Mini App in Telegram\n" +
-        "/weekly_report - Generate formal Weekly Executive Sales Report in Notion\n" +
-        "/help - Show this commands overview"
-    );
+      "/start - Check account status & registration\n" +
+      "/app - Open the Sales CRM Mini App in Telegram\n";
+    if (isManager) {
+      text += "/weekly_report - Generate formal Weekly Executive Sales Report in Notion\n";
+    }
+    text += "/help - Show this commands overview";
+    await ctx.reply(text);
   });
 
   // 5. Inline callback queries (Role selection & Manager approvals)

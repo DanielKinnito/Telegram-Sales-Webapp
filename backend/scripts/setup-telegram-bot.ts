@@ -30,14 +30,34 @@ async function setupBotProfile() {
     );
     console.log("✅ Set Full Description");
 
-    // 3. Set Bot Commands
+    // 3. Set Default Commands for all users (sales reps, front desk, guests)
+    // Note: /weekly_report is strictly excluded from default scope!
     await bot.api.setMyCommands([
       { command: "start", description: "Check access & launch CRM" },
       { command: "app", description: "Open Sales CRM Mini App" },
-      { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
       { command: "help", description: "Show usage commands" },
-    ]);
-    console.log("✅ Configured Bot Commands (/start, /app, /weekly_report, /help)");
+    ], { scope: { type: "default" } });
+    console.log("✅ Configured Default Bot Commands (/start, /app, /help) - hidden from non-managers");
+
+    // 4. Set Scoped Commands exclusively for Executive Managers
+    const managerChatIds = (env.TELEGRAM_MANAGER_CHAT_IDS || "")
+      .split(",")
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((id) => !isNaN(id));
+
+    for (const mgrId of managerChatIds) {
+      try {
+        await bot.api.setMyCommands([
+          { command: "start", description: "Check access & launch CRM" },
+          { command: "app", description: "Open Sales CRM Mini App" },
+          { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
+          { command: "help", description: "Show usage commands" },
+        ], { scope: { type: "chat", chat_id: mgrId } });
+        console.log(`✅ Configured Executive Manager Commands for Chat ID ${mgrId} (includes /weekly_report)`);
+      } catch (err: any) {
+        console.warn(`⚠️ Manager chat ${mgrId} not yet initiated: ${err.message}`);
+      }
+    }
 
     // 4. Configure Persistent Chat Menu Button (WebApp Mode)
     if (webappUrl && webappUrl.startsWith("https://")) {
