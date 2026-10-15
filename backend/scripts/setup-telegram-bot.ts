@@ -34,9 +34,10 @@ async function setupBotProfile() {
     await bot.api.setMyCommands([
       { command: "start", description: "Check access & launch CRM" },
       { command: "app", description: "Open Sales CRM Mini App" },
+      { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
       { command: "help", description: "Show usage commands" },
     ]);
-    console.log("✅ Configured Bot Commands (/start, /app, /help)");
+    console.log("✅ Configured Bot Commands (/start, /app, /weekly_report, /help)");
 
     // 4. Configure Persistent Chat Menu Button (WebApp Mode)
     if (webappUrl && webappUrl.startsWith("https://")) {

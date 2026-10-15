@@ -51,6 +51,14 @@ if (env.NODE_ENV !== "test") {
   bot.start({
     onStart: (info) => {
       console.log(`🤖 GrammY bot @${info.username} listening for onboarding & notifications`);
+      bot.api.setMyCommands([
+        { command: "start", description: "Check access & launch CRM" },
+        { command: "app", description: "Open Sales CRM Mini App" },
+        { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
+        { command: "help", description: "Show usage commands" },
+      ]).catch((err) => {
+        console.warn("⚠️ Could not update Telegram bot commands menu:", err.message);
+      });
     },
   }).catch((err) => {
     console.error("❌ Failed to launch Telegram bot:", err);
