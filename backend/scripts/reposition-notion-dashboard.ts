@@ -5,14 +5,11 @@ async function main() {
   const client = getNotionClient();
   const parentId = env.NOTION_PARENT_PAGE_ID;
 
-  console.log("Repositioning modern cards grid directly to the top of Notion page...");
-
   // 1. Fetch current blocks on parent page
   const blocksRes: any = await (client.rawClient as any).blocks.children.list({ block_id: parentId });
   const blocks: any[] = blocksRes.results;
 
   // Delete all non-child_database blocks
-  let firstBlockId: string | null = null;
   for (const block of blocks) {
     if (block.type !== "child_database") {
       try {
@@ -24,13 +21,16 @@ async function main() {
     }
   }
 
-  // 2. Fetch live record counts
+  // 2. Fetch record counts
   let dealsCount = 0;
   let accountsCount = 0;
   let repsCount = 0;
   let logsCount = 0;
   let queueCount = 0;
   let contactsCount = 0;
+  let reportsCount = 0;
+
+  const reportsDbId = env.NOTION_REPORTS_DB_ID || "4d04d701-bbf7-4797-951c-5fc010720939";
 
   try {
     const dealsRes: any = await client.queryDatabase(env.NOTION_DEALS_DB_ID, {});
@@ -50,6 +50,9 @@ async function main() {
 
     const contactsRes: any = await client.queryDatabase(env.NOTION_CONTACTS_DB_ID, {});
     contactsCount = contactsRes.results?.length || 0;
+
+    const reportsRes: any = await client.queryDatabase(reportsDbId, {});
+    reportsCount = reportsRes.results?.length || 0;
   } catch (err: any) {
     console.warn("Could not fetch counts:", err.message);
   }
@@ -60,29 +63,17 @@ async function main() {
   const logsUrl = `https://www.notion.so/${env.NOTION_SALES_LOGS_DB_ID.replace(/-/g, "")}`;
   const queueUrl = `https://www.notion.so/${env.NOTION_QUEUE_DB_ID.replace(/-/g, "")}`;
   const contactsUrl = `https://www.notion.so/${env.NOTION_CONTACTS_DB_ID.replace(/-/g, "")}`;
+  const reportsUrl = `https://www.notion.so/${reportsDbId.replace(/-/g, "")}`;
 
-  // 3. Build sleek modern card grid
-  const modernBlocks: any[] = [
-    {
-      type: "heading_2",
-      heading_2: {
-        rich_text: [
-          {
-            type: "text",
-            text: { content: "📱 Quick Navigation Cards (Click to Open)" },
-            annotations: { bold: true },
-          },
-        ],
-      },
-    },
-    { type: "divider", divider: {} },
-
-    // Row 1: 3 Columns (Deals, Accounts, Sales Team)
+  // 3. Build MINIMAL cards matching clean executive standard:
+  // ONLY Title and Count, ZERO description words, ZERO "↗ Open Table" buttons
+  const cleanBlocks: any[] = [
+    // Row 1: 4 Columns (Deals, Accounts, Sales Reps, Executive Reports)
     {
       type: "column_list",
       column_list: {
         children: [
-          // Deals Card
+          // Deals
           {
             type: "column",
             column: {
@@ -98,13 +89,8 @@ async function main() {
                       },
                       {
                         type: "text",
-                        text: { content: `${dealsCount} active deals\n`, link: { url: dealsUrl } },
-                        annotations: { color: "blue", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Deals Table", link: { url: dealsUrl } },
-                        annotations: { color: "blue", underline: true },
+                        text: { content: `${dealsCount} active deals`, link: { url: dealsUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "💼" },
@@ -115,7 +101,7 @@ async function main() {
             },
           },
 
-          // Accounts Card
+          // Accounts
           {
             type: "column",
             column: {
@@ -126,18 +112,13 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Accounts & Clients\n", link: { url: accountsUrl } },
+                        text: { content: "Accounts\n", link: { url: accountsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${accountsCount} registered companies\n`, link: { url: accountsUrl } },
-                        annotations: { color: "purple", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Accounts Table", link: { url: accountsUrl } },
-                        annotations: { color: "purple", underline: true },
+                        text: { content: `${accountsCount} accounts`, link: { url: accountsUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "🏢" },
@@ -148,7 +129,7 @@ async function main() {
             },
           },
 
-          // Sales Reps Card
+          // Sales Reps
           {
             type: "column",
             column: {
@@ -159,21 +140,44 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Sales Team\n", link: { url: repsUrl } },
+                        text: { content: "Sales Reps\n", link: { url: repsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: `${repsCount} active members\n`, link: { url: repsUrl } },
-                        annotations: { color: "green", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Sales Reps Table", link: { url: repsUrl } },
-                        annotations: { color: "green", underline: true },
+                        text: { content: `${repsCount} members`, link: { url: repsUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "👥" },
+                    color: "gray_background",
+                  },
+                },
+              ],
+            },
+          },
+
+          // Executive Reports
+          {
+            type: "column",
+            column: {
+              children: [
+                {
+                  type: "callout",
+                  callout: {
+                    rich_text: [
+                      {
+                        type: "text",
+                        text: { content: "Executive Reports\n", link: { url: reportsUrl } },
+                        annotations: { bold: true },
+                      },
+                      {
+                        type: "text",
+                        text: { content: `${reportsCount} published`, link: { url: reportsUrl } },
+                        annotations: { color: "gray" },
+                      },
+                    ],
+                    icon: { type: "emoji", emoji: "📊" },
                     color: "gray_background",
                   },
                 },
@@ -189,7 +193,7 @@ async function main() {
       type: "column_list",
       column_list: {
         children: [
-          // Activity Logs Card
+          // Activity Logs
           {
             type: "column",
             column: {
@@ -205,13 +209,8 @@ async function main() {
                       },
                       {
                         type: "text",
-                        text: { content: `${logsCount} activity logs\n`, link: { url: logsUrl } },
-                        annotations: { color: "orange", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Activity Logs Table", link: { url: logsUrl } },
-                        annotations: { color: "orange", underline: true },
+                        text: { content: `${logsCount} logs`, link: { url: logsUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "📝" },
@@ -222,7 +221,7 @@ async function main() {
             },
           },
 
-          // Rotational Queue Card
+          // Rotational Queue
           {
             type: "column",
             column: {
@@ -238,13 +237,8 @@ async function main() {
                       },
                       {
                         type: "text",
-                        text: { content: "Front desk engine\n", link: { url: queueUrl } },
-                        annotations: { color: "red", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Queue Table", link: { url: queueUrl } },
-                        annotations: { color: "red", underline: true },
+                        text: { content: `${queueCount} in queue`, link: { url: queueUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "🔔" },
@@ -255,7 +249,7 @@ async function main() {
             },
           },
 
-          // Contacts & Brokers Card
+          // Contacts
           {
             type: "column",
             column: {
@@ -266,18 +260,13 @@ async function main() {
                     rich_text: [
                       {
                         type: "text",
-                        text: { content: "Contacts & Brokers\n", link: { url: contactsUrl } },
+                        text: { content: "Contacts\n", link: { url: contactsUrl } },
                         annotations: { bold: true },
                       },
                       {
                         type: "text",
-                        text: { content: "Key stakeholders\n", link: { url: contactsUrl } },
-                        annotations: { color: "yellow", bold: true },
-                      },
-                      {
-                        type: "text",
-                        text: { content: "↗ Open Contacts Table", link: { url: contactsUrl } },
-                        annotations: { color: "yellow", underline: true },
+                        text: { content: `${contactsCount} contacts`, link: { url: contactsUrl } },
+                        annotations: { color: "gray" },
                       },
                     ],
                     icon: { type: "emoji", emoji: "📇" },
@@ -290,18 +279,14 @@ async function main() {
         ],
       },
     },
-    { type: "divider", divider: {} },
   ];
 
-  // Insert at top: in Notion, if child databases exist, we can create a temporary paragraph at the top or append after null
-  // In Notion API, if after is omitted, it appends to the end. But Notion parent page can also have a top block.
-  // Let's create the top blocks.
-  const appendRes = await (client.rawClient as any).blocks.children.append({
+  await (client.rawClient as any).blocks.children.append({
     block_id: parentId,
-    children: modernBlocks,
+    children: cleanBlocks,
   });
 
-  console.log("✅ Successfully updated Notion page with sleek modern card grid!");
+  console.log("✅ Successfully updated Notion page with Executive Reports card included!");
 }
 
 main().catch(console.error);

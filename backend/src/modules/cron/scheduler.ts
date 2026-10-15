@@ -1,17 +1,21 @@
 import cron from "node-cron";
 import { CronService } from "./cronService.js";
+import type { ReportsService } from "../reports/reportsService.js";
 
 export interface SchedulerOptions {
   cronService: CronService;
+  reportsService?: ReportsService | undefined;
   briefingSchedule?: string | undefined;
   inactivitySchedule?: string | undefined;
+  fridayReportSchedule?: string | undefined;
   timezone?: string | undefined;
 }
 
 export function startScheduler(options: SchedulerOptions) {
-  const { cronService } = options;
+  const { cronService, reportsService } = options;
   const briefingSchedule = options.briefingSchedule || "0 9 * * *"; // Daily 9:00 AM
   const inactivitySchedule = options.inactivitySchedule || "0 10 * * *"; // Daily 10:00 AM
+  const fridayReportSchedule = options.fridayReportSchedule || "0 16 * * 5"; // Every Friday at 16:00 (4:00 PM)
   const timezone = options.timezone || "Africa/Addis_Ababa";
 
   // 1. Daily 9:00 AM follow-up briefing
@@ -64,14 +68,33 @@ export function startScheduler(options: SchedulerOptions) {
     { timezone }
   );
 
+  // 4. Friday 4:00 PM Weekly Executive Sales Performance Report Worker
+  const reportTask = cron.schedule(
+    fridayReportSchedule,
+    async () => {
+      console.log("⏰ Running Friday Weekly Executive Sales Report Worker...");
+      if (reportsService) {
+        try {
+          const res = await reportsService.generateWeeklyReport();
+          console.log(`✅ Friday Weekly Executive Report compiled: ${res.reportTitle} (${res.reportUrl})`);
+        } catch (err: any) {
+          console.error("❌ Error in Friday Weekly Report Generator:", err.message);
+        }
+      }
+    },
+    { timezone }
+  );
+
   return {
     briefingTask,
     sweeperTask,
     reminderTask,
+    reportTask,
     stop: () => {
       briefingTask.stop();
       sweeperTask.stop();
       reminderTask.stop();
+      reportTask.stop();
     },
   };
 }

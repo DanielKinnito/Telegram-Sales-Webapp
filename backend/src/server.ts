@@ -6,6 +6,7 @@ import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
 import { CronService } from "./modules/cron/cronService.js";
 import { startScheduler } from "./modules/cron/scheduler.js";
+import { ReportsService } from "./modules/reports/reportsService.js";
 
 const server = app.listen(env.PORT, () => {
   console.log(`⚡ Backend server listening on port ${env.PORT} in ${env.NODE_ENV} mode`);
@@ -13,9 +14,13 @@ const server = app.listen(env.PORT, () => {
 
 // Launch bot long polling and warm up TIN cache in non-test environments
 if (env.NODE_ENV !== "test") {
+  const notionClient = getNotionClient();
+  const salesRepsService = new SalesRepsService(notionClient, env.NOTION_SALES_REPS_DB_ID);
+  const managerChatIds = parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS);
+
   const tinCache = getTinCache();
   tinCache
-    .warmup(getNotionClient(), env.NOTION_ACCOUNTS_DB_ID)
+    .warmup(notionClient, env.NOTION_ACCOUNTS_DB_ID)
     .then(() => {
       console.log(`💾 In-memory TIN cache warmed up (${tinCache.size()} registered TINs loaded)`);
     })
@@ -23,7 +28,24 @@ if (env.NODE_ENV !== "test") {
       console.warn("⚠️ TIN cache warmup error:", err.message);
     });
 
-  const bot = getBot();
+  const reportsService = new ReportsService({
+    notionClient,
+    salesRepsService,
+    reportsDbId: env.NOTION_REPORTS_DB_ID,
+    dealsDbId: env.NOTION_DEALS_DB_ID,
+    accountsDbId: env.NOTION_ACCOUNTS_DB_ID,
+    salesLogsDbId: env.NOTION_SALES_LOGS_DB_ID,
+    queueDbId: env.NOTION_QUEUE_DB_ID,
+    managerChatIds,
+  });
+
+  const bot = getBot({
+    salesRepsService,
+    reportsService,
+    managerChatIds,
+  });
+  reportsService.setBot(bot);
+
   bot.start({
     onStart: (info) => {
       console.log(`🤖 GrammY bot @${info.username} listening for onboarding & notifications`);
@@ -34,15 +56,15 @@ if (env.NODE_ENV !== "test") {
 
   // Launch Cron Workers
   const cronService = new CronService({
-    notionClient: getNotionClient(),
-    salesRepsService: new SalesRepsService(getNotionClient(), env.NOTION_SALES_REPS_DB_ID),
+    notionClient,
+    salesRepsService,
     dealsDbId: env.NOTION_DEALS_DB_ID,
     salesLogsDbId: env.NOTION_SALES_LOGS_DB_ID,
-    managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
+    managerChatIds,
     bot,
   });
-  startScheduler({ cronService });
-  console.log("⏰ Automated notification cron workers registered (9:00 AM briefing & inactivity sweeper)");
+  startScheduler({ cronService, reportsService });
+  console.log("⏰ Automated notification cron workers registered (9:00 AM briefing, inactivity sweeper, Friday reports)");
 }
 
 export default server;
