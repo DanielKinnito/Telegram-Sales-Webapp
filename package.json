@@ -14,7 +14,9 @@
     "typecheck": "npm --prefix backend run typecheck",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build"
+    "build:frontend": "npm --prefix frontend run build",
+    "tunnel": ".\\backend\\tools\\cloudflared.exe tunnel --url http://localhost:3000",
+    "setup:bot": "npm --prefix backend run tsx scripts/setup-telegram-bot.ts"
   },
   "keywords": [],
   "author": "",
