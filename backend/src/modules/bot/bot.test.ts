@@ -55,7 +55,7 @@ describe("GrammY Bot Module", () => {
       managerChatIds: [999001],
     });
 
-    bot.botInfo = {
+    const mockBotInfo: any = {
       id: 123456789,
       is_bot: true,
       first_name: "TestBot",
@@ -66,6 +66,7 @@ describe("GrammY Bot Module", () => {
       can_connect_to_business: false,
       has_main_web_app: false,
     };
+    bot.botInfo = mockBotInfo;
 
     const sentMessages: string[] = [];
     bot.api.config.use(async (prev, method, payload: any) => {
@@ -81,7 +82,7 @@ describe("GrammY Bot Module", () => {
       message: {
         message_id: 55,
         date: Math.floor(Date.now() / 1000),
-        chat: { id: 999001, type: "private" },
+        chat: { id: 999001, type: "private" } as any,
         from: { id: 999001, is_bot: false, first_name: "Manager" },
         text: "/weekly_report",
         entities: [{ offset: 0, length: 14, type: "bot_command" }],
@@ -127,7 +128,7 @@ describe("GrammY Bot Module", () => {
       supports_inline_queries: false,
       can_connect_to_business: false,
       has_main_web_app: false,
-    };
+    } as any;
 
     const sentMessages: string[] = [];
     bot.api.config.use(async (prev, method, payload: any) => {
@@ -143,7 +144,7 @@ describe("GrammY Bot Module", () => {
       message: {
         message_id: 56,
         date: Math.floor(Date.now() / 1000),
-        chat: { id: 888001, type: "private" },
+        chat: { id: 888001, type: "private" } as any,
         from: { id: 888001, is_bot: false, first_name: "SalesRep" },
         text: "/weekly_report",
         entities: [{ offset: 0, length: 14, type: "bot_command" }],
@@ -186,7 +187,7 @@ describe("GrammY Bot Module", () => {
       supports_inline_queries: false,
       can_connect_to_business: false,
       has_main_web_app: false,
-    };
+    } as any;
 
     const sentMessages: string[] = [];
     bot.api.config.use(async (prev, method, payload: any) => {
@@ -203,7 +204,7 @@ describe("GrammY Bot Module", () => {
       message: {
         message_id: 57,
         date: Math.floor(Date.now() / 1000),
-        chat: { id: 888002, type: "private" },
+        chat: { id: 888002, type: "private" } as any,
         from: { id: 888002, is_bot: false, first_name: "Regular Rep" },
         text: "/help",
         entities: [{ offset: 0, length: 5, type: "bot_command" }],
@@ -216,7 +217,7 @@ describe("GrammY Bot Module", () => {
       message: {
         message_id: 58,
         date: Math.floor(Date.now() / 1000),
-        chat: { id: 999001, type: "private" },
+        chat: { id: 999001, type: "private" } as any,
         from: { id: 999001, is_bot: false, first_name: "Manager" },
         text: "/help",
         entities: [{ offset: 0, length: 5, type: "bot_command" }],
@@ -231,5 +232,200 @@ describe("GrammY Bot Module", () => {
 
     // Manager MUST see /weekly_report in /help
     expect(sentMessages[1]).toContain("/weekly_report");
+  });
+
+  describe("/checktin command", () => {
+    it("reports 'Available. Register this account by heading to the app.' when TIN is available", async () => {
+      const mockNotionClient: Partial<ResilientNotionClient> = {
+        queryDatabase: vi.fn(),
+        createPage: vi.fn(),
+        updatePage: vi.fn(),
+      };
+      const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+      vi.spyOn(salesRepsService, "findSalesRepByTelegramId").mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "888001",
+        fullName: "Active Rep",
+        role: "Sales Rep",
+        status: "Active",
+      } as any);
+
+      const { setBotLeadsService } = await import("./bot.js");
+      const mockLeadsService = {
+        checkTin: vi.fn().mockResolvedValue({ available: true }),
+      };
+      setBotLeadsService(mockLeadsService as any);
+
+      const bot = createBot({
+        token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+        salesRepsService,
+        managerChatIds: [999001],
+      });
+
+      bot.botInfo = {
+        id: 123456789,
+        is_bot: true,
+        first_name: "TestBot",
+        username: "test_sales_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+        can_connect_to_business: false,
+        has_main_web_app: false,
+      } as any;
+
+      const sentMessages: string[] = [];
+      bot.api.config.use(async (prev, method, payload: any) => {
+        if (method === "sendMessage") {
+          sentMessages.push(payload.text);
+          return { ok: true, result: { message_id: 126, chat: { id: payload.chat_id } } } as any;
+        }
+        return prev(method, payload);
+      });
+
+      await bot.handleUpdate({
+        update_id: 1005,
+        message: {
+          message_id: 59,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 888001, type: "private" } as any,
+          from: { id: 888001, is_bot: false, first_name: "Active Rep" },
+          text: "/checktin 0012345678",
+          entities: [{ offset: 0, length: 9, type: "bot_command" }],
+        },
+      });
+
+      expect(mockLeadsService.checkTin).toHaveBeenCalledWith("0012345678");
+      expect(sentMessages.length).toBe(1);
+      expect(sentMessages[0]).toContain("Available. Register this account by heading to the app.");
+    });
+
+    it("reports 'Not available. Taken by <Sales person name>.' when TIN is taken", async () => {
+      const mockNotionClient: Partial<ResilientNotionClient> = {
+        queryDatabase: vi.fn(),
+        createPage: vi.fn(),
+        updatePage: vi.fn(),
+      };
+      const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+      vi.spyOn(salesRepsService, "findSalesRepByTelegramId").mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "888001",
+        fullName: "Active Rep",
+        role: "Sales Rep",
+        status: "Active",
+      } as any);
+
+      const { setBotLeadsService } = await import("./bot.js");
+      const mockLeadsService = {
+        checkTin: vi.fn().mockResolvedValue({
+          available: false,
+          conflict: {
+            companyName: "Acme Corp",
+            assignedRepName: "Daniel Mekonnen",
+          },
+        }),
+      };
+      setBotLeadsService(mockLeadsService as any);
+
+      const bot = createBot({
+        token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+        salesRepsService,
+        managerChatIds: [999001],
+      });
+
+      bot.botInfo = {
+        id: 123456789,
+        is_bot: true,
+        first_name: "TestBot",
+        username: "test_sales_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+        can_connect_to_business: false,
+        has_main_web_app: false,
+      } as any;
+
+      const sentMessages: string[] = [];
+      bot.api.config.use(async (prev, method, payload: any) => {
+        if (method === "sendMessage") {
+          sentMessages.push(payload.text);
+          return { ok: true, result: { message_id: 127, chat: { id: payload.chat_id } } } as any;
+        }
+        return prev(method, payload);
+      });
+
+      await bot.handleUpdate({
+        update_id: 1006,
+        message: {
+          message_id: 60,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 888001, type: "private" } as any,
+          from: { id: 888001, is_bot: false, first_name: "Active Rep" },
+          text: "/checktin 0012345678",
+          entities: [{ offset: 0, length: 9, type: "bot_command" }],
+        },
+      });
+
+      expect(sentMessages.length).toBe(1);
+      expect(sentMessages[0]).toContain("Not available. Taken by Daniel Mekonnen.");
+    });
+
+    it("prompts for 10-digit TIN format if arguments are missing or invalid", async () => {
+      const mockNotionClient: Partial<ResilientNotionClient> = {
+        queryDatabase: vi.fn(),
+        createPage: vi.fn(),
+        updatePage: vi.fn(),
+      };
+      const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+      vi.spyOn(salesRepsService, "findSalesRepByTelegramId").mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "888001",
+        fullName: "Active Rep",
+        role: "Sales Rep",
+        status: "Active",
+      } as any);
+
+      const bot = createBot({
+        token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+        salesRepsService,
+        managerChatIds: [999001],
+      });
+
+      bot.botInfo = {
+        id: 123456789,
+        is_bot: true,
+        first_name: "TestBot",
+        username: "test_sales_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+        can_connect_to_business: false,
+        has_main_web_app: false,
+      } as any;
+
+      const sentMessages: string[] = [];
+      bot.api.config.use(async (prev, method, payload: any) => {
+        if (method === "sendMessage") {
+          sentMessages.push(payload.text);
+          return { ok: true, result: { message_id: 128, chat: { id: payload.chat_id } } } as any;
+        }
+        return prev(method, payload);
+      });
+
+      await bot.handleUpdate({
+        update_id: 1007,
+        message: {
+          message_id: 61,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 888001, type: "private" } as any,
+          from: { id: 888001, is_bot: false, first_name: "Active Rep" },
+          text: "/checktin 12345",
+          entities: [{ offset: 0, length: 9, type: "bot_command" }],
+        },
+      });
+
+      expect(sentMessages.length).toBe(1);
+      expect(sentMessages[0]).toContain("must be exactly 10 numeric digits");
+    });
   });
 });

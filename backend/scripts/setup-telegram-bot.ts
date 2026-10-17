@@ -35,9 +35,10 @@ async function setupBotProfile() {
     await bot.api.setMyCommands([
       { command: "start", description: "Check access & launch CRM" },
       { command: "app", description: "Open Sales CRM Mini App" },
+      { command: "checktin", description: "Check Ethiopian TIN availability" },
       { command: "help", description: "Show usage commands" },
     ], { scope: { type: "default" } });
-    console.log("✅ Configured Default Bot Commands (/start, /app, /help) - hidden from non-managers");
+    console.log("✅ Configured Default Bot Commands (/start, /app, /checktin, /help) - hidden from non-managers");
 
     // 4. Set Scoped Commands exclusively for Executive Managers
     const managerChatIds = (env.TELEGRAM_MANAGER_CHAT_IDS || "")
@@ -50,6 +51,7 @@ async function setupBotProfile() {
         await bot.api.setMyCommands([
           { command: "start", description: "Check access & launch CRM" },
           { command: "app", description: "Open Sales CRM Mini App" },
+          { command: "checktin", description: "Check Ethiopian TIN availability" },
           { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
           { command: "help", description: "Show usage commands" },
         ], { scope: { type: "chat", chat_id: mgrId } });

@@ -263,4 +263,39 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
       );
     });
   });
+
+  describe("addActivity", () => {
+    it("formats scheduled time in 12-hour AM/PM format and logs rep full name", async () => {
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "123456",
+        fullName: "Daniel Mekonnen",
+      });
+
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_act_1" });
+
+      const result = await service.addActivity({
+        dealId: "deal_p1",
+        repTelegramId: "123456",
+        type: "Call",
+        content: "Follow up regarding generator delivery timeframe",
+        scheduledDate: "2026-10-20",
+        scheduledTime: "14:30",
+      });
+
+      expect(result.pageId).toBe("log_act_1");
+      expect(mockNotionClient.createPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            "Rep ID": {
+              rich_text: [{ text: { content: "Daniel Mekonnen (123456)" } }],
+            },
+            "Scheduled Time": {
+              rich_text: [{ text: { content: "2:30 PM" } }],
+            },
+          }),
+        })
+      );
+    });
+  });
 });

@@ -27,10 +27,20 @@ describe("SalesRepsService", () => {
         mockDbId,
         expect.objectContaining({
           filter: {
-            property: "Telegram ID",
-            title: {
-              equals: "12345678",
-            },
+            or: [
+              {
+                property: "Telegram User ID",
+                rich_text: {
+                  equals: "12345678",
+                },
+              },
+              {
+                property: "Telegram ID",
+                title: {
+                  equals: "12345678",
+                },
+              },
+            ],
           },
         })
       );
@@ -43,7 +53,10 @@ describe("SalesRepsService", () => {
             id: "page_rep_1",
             properties: {
               "Telegram ID": {
-                title: [{ plain_text: "12345678" }],
+                title: [{ plain_text: "John Doe" }],
+              },
+              "Telegram User ID": {
+                rich_text: [{ plain_text: "12345678" }],
               },
               "Full Name": {
                 rich_text: [{ plain_text: "John Doe" }],
@@ -99,7 +112,10 @@ describe("SalesRepsService", () => {
           parent: { database_id: mockDbId },
           properties: expect.objectContaining({
             "Telegram ID": {
-              title: [{ text: { content: "98765432" } }],
+              title: [{ text: { content: "Sarah Connor" } }],
+            },
+            "Telegram User ID": {
+              rich_text: [{ text: { content: "98765432" } }],
             },
             "Full Name": {
               rich_text: [{ text: { content: "Sarah Connor" } }],

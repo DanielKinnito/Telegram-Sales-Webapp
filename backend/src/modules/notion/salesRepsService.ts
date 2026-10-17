@@ -32,12 +32,23 @@ export class SalesRepsService {
   public async findSalesRepByTelegramId(telegramId: string | number): Promise<SalesRepRecord | null> {
     const tidString = telegramId.toString().trim();
 
-    const response = (await this.notionClient.queryDatabase(this.databaseId, {
+    // Query by Telegram User ID (rich_text) or title fallback
+    let response = (await this.notionClient.queryDatabase(this.databaseId, {
       filter: {
-        property: "Telegram ID",
-        title: {
-          equals: tidString,
-        },
+        or: [
+          {
+            property: "Telegram User ID",
+            rich_text: {
+              equals: tidString,
+            },
+          },
+          {
+            property: "Telegram ID",
+            title: {
+              equals: tidString,
+            },
+          },
+        ],
       },
     })) as { results: any[] };
 
@@ -54,8 +65,15 @@ export class SalesRepsService {
     }
     const props = page.properties;
 
-    const tid = props?.["Telegram ID"]?.title?.[0]?.plain_text || tidString;
-    const fullName = props?.["Full Name"]?.rich_text?.[0]?.plain_text || "";
+    const tid =
+      props?.["Telegram User ID"]?.rich_text?.[0]?.plain_text ||
+      props?.["Telegram ID"]?.rich_text?.[0]?.plain_text ||
+      tidString;
+    const fullName =
+      props?.["Full Name"]?.rich_text?.[0]?.plain_text ||
+      props?.["Telegram ID"]?.title?.[0]?.plain_text ||
+      props?.["Name"]?.title?.[0]?.plain_text ||
+      "";
     const phone = props?.["Phone"]?.phone_number || "";
     const role = (props?.["Role"]?.select?.name as RepRole) || "Sales Rep";
     const status = (props?.["Status"]?.select?.name as RepStatus) || "Pending Approval";
@@ -85,10 +103,19 @@ export class SalesRepsService {
 
     return (response.results || []).map((page: any) => {
       const props = page.properties;
+      const tid =
+        props?.["Telegram User ID"]?.rich_text?.[0]?.plain_text ||
+        props?.["Telegram ID"]?.rich_text?.[0]?.plain_text ||
+        "";
+      const fullName =
+        props?.["Full Name"]?.rich_text?.[0]?.plain_text ||
+        props?.["Telegram ID"]?.title?.[0]?.plain_text ||
+        "Sales Rep";
+
       return {
         pageId: page.id,
-        telegramId: props?.["Telegram ID"]?.title?.[0]?.plain_text || "",
-        fullName: props?.["Full Name"]?.rich_text?.[0]?.plain_text || "Sales Rep",
+        telegramId: tid,
+        fullName,
         phone: props?.["Phone"]?.phone_number || "",
         role: (props?.["Role"]?.select?.name as RepRole) || "Sales Rep",
         status: "Active" as RepStatus,
@@ -106,10 +133,13 @@ export class SalesRepsService {
       parent: { database_id: this.databaseId },
       properties: {
         "Telegram ID": {
-          title: [{ text: { content: tidString } }],
+          title: [{ text: { content: input.fullName } }],
         },
         "Full Name": {
           rich_text: [{ text: { content: input.fullName } }],
+        },
+        "Telegram User ID": {
+          rich_text: [{ text: { content: tidString } }],
         },
         "Phone": {
           phone_number: input.phone,

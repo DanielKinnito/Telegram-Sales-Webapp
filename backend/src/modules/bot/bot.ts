@@ -4,11 +4,13 @@ import { getNotionClient } from "../notion/notionClient.js";
 import { SalesRepsService } from "../notion/salesRepsService.js";
 import { OnboardingController } from "./onboarding.js";
 import { ReportsService } from "../reports/reportsService.js";
+import type { LeadsService } from "../leads/leadsService.js";
 
 export interface CreateBotOptions {
   token?: string | undefined;
   salesRepsService?: SalesRepsService | undefined;
   reportsService?: ReportsService | undefined;
+  leadsService?: LeadsService | undefined;
   managerChatIds?: number[] | undefined;
   miniAppUrl?: string | undefined;
 }
@@ -22,20 +24,27 @@ export function parseManagerChatIds(raw?: string): number[] {
 }
 
 let registeredReportsService: ReportsService | null = null;
+let registeredLeadsService: LeadsService | null = null;
 
 export function setBotReportsService(service: ReportsService) {
   registeredReportsService = service;
 }
 
+export function setBotLeadsService(service: LeadsService) {
+  registeredLeadsService = service;
+}
+
 export const DEFAULT_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
+  { command: "checktin", description: "Check Ethiopian TIN availability" },
   { command: "help", description: "Show usage commands" },
 ];
 
 export const MANAGER_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
+  { command: "checktin", description: "Check Ethiopian TIN availability" },
   { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
   { command: "help", description: "Show usage commands" },
 ];
@@ -173,7 +182,95 @@ export function createBot(options: CreateBotOptions = {}) {
     }
   });
 
-  // 4. /help command
+    if (options.leadsService) {
+      registeredLeadsService = options.leadsService;
+    }
+
+    // 4. /checktin command (Quick TIN conflict check directly from Telegram chat)
+    bot.command(["checktin", "check_tin", "checkTin"], async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
+
+      // Verify user is registered & active
+      const isManagerChat = managerChatIds.includes(userId);
+      let isApprovedRep = false;
+      try {
+        const rep = await salesRepsService.findSalesRepByTelegramId(userId);
+        if (rep && rep.status === "Active") {
+          isApprovedRep = true;
+        }
+      } catch {}
+
+      if (!isManagerChat && !isApprovedRep) {
+        await ctx.reply("Access Restricted: Please complete registration via /start and await manager approval to use CRM tools.");
+        return;
+      }
+
+      let activeLeadsService = options.leadsService || registeredLeadsService;
+      if (!activeLeadsService) {
+        try {
+          const { LeadsService } = await import("../leads/leadsService.js");
+          const { getTinCache } = await import("../leads/tinCache.js");
+          activeLeadsService = new LeadsService({
+            notionClient: getNotionClient(),
+            salesRepsService,
+            tinCache: getTinCache(),
+            accountsDbId: env.NOTION_ACCOUNTS_DB_ID,
+          });
+          registeredLeadsService = activeLeadsService;
+        } catch (err: any) {
+          console.error("Failed to initialize LeadsService for /checktin:", err);
+        }
+      }
+
+      if (!activeLeadsService) {
+        await ctx.reply("TIN verification service is currently initializing. Please try again shortly.");
+        return;
+      }
+
+      const text = ctx.message?.text?.trim() || "";
+      const parts = text.split(/\s+/);
+      const rawArg = parts[1];
+
+      if (!rawArg) {
+        await ctx.reply(
+          "Please provide a 10-digit TIN number to check.\n\nExample:\n/checktin 0012345678"
+        );
+        return;
+      }
+
+      const cleanTin = rawArg.replace(/\D/g, "");
+      if (cleanTin.length !== 10) {
+        await ctx.reply(
+          "Invalid TIN format: Ethiopian TIN must be exactly 10 numeric digits.\nExample: /checktin 0012345678"
+        );
+        return;
+      }
+
+      try {
+        const result = await activeLeadsService.checkTin(cleanTin);
+        if (result.available) {
+          if (miniAppUrl) {
+            await ctx.reply("Available. Register this account by heading to the app.", {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "💼 Open Sales CRM App", web_app: { url: miniAppUrl } }],
+                ],
+              },
+            });
+          } else {
+            await ctx.reply("Available. Register this account by heading to the app.");
+          }
+        } else {
+          const takenBy = result.conflict?.ownerName || (result.conflict as any)?.assignedRepName || "another Sales person";
+          await ctx.reply(`Not available. Taken by ${takenBy}.`);
+        }
+      } catch (err: any) {
+        await ctx.reply(`Error checking TIN: ${err.message}`);
+      }
+    });
+
+  // 5. /help command
   bot.command("help", async (ctx) => {
     const userId = ctx.from?.id;
     let isManager = false;
@@ -192,7 +289,8 @@ export function createBot(options: CreateBotOptions = {}) {
     let text =
       "📌 Sales CRM Bot Commands:\n\n" +
       "/start - Check account status & registration\n" +
-      "/app - Open the Sales CRM Mini App in Telegram\n";
+      "/app - Open the Sales CRM Mini App in Telegram\n" +
+      "/checktin <tin> - Check if an Ethiopian TIN is available\n";
     if (isManager) {
       text += "/weekly_report - Generate formal Weekly Executive Sales Report in Notion\n";
     }

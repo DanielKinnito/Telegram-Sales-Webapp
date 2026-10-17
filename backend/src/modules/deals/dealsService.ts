@@ -2,6 +2,18 @@ import type { ResilientNotionClient } from "../notion/notionClient.js";
 import type { SalesRepsService } from "../notion/salesRepsService.js";
 import { env } from "../../config/env.js";
 
+export function formatTimeTo12Hour(timeStr: string): string {
+  if (!timeStr) return timeStr;
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return timeStr;
+  let hours = parseInt(match[1]!, 10);
+  const minutes = match[2]!;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${hours}:${minutes} ${ampm}`;
+}
+
 export interface DealRecord {
   pageId: string;
   title: string;
@@ -748,6 +760,18 @@ export class DealsService {
     const activityDate = input.scheduledDate || today;
     const repIdStr = String(input.repTelegramId);
 
+    let repDisplayName = input.repName ? `${input.repName} (${repIdStr})` : repIdStr;
+    if (!input.repName && this.salesRepsService) {
+      try {
+        const rep = await this.salesRepsService.findSalesRepByTelegramId(repIdStr);
+        if (rep && rep.fullName) {
+          repDisplayName = `${rep.fullName} (${repIdStr})`;
+        }
+      } catch {}
+    }
+
+    const formatted12hTime = input.scheduledTime ? formatTimeTo12Hour(input.scheduledTime) : undefined;
+
     const properties: Record<string, any> = {
       "Log Title / ID": {
         title: [{ text: { content: `[${input.type}] ${input.companyName || "Activity"}` } }],
@@ -756,13 +780,13 @@ export class DealsService {
         select: { name: input.type },
       },
       "Note Content": {
-        rich_text: [{ text: { content: input.content.trim() } }],
+        rich_text: [{ text: { content: (input.content || (input as any).notes || "").trim() } }],
       },
       "Activity Date": {
         date: { start: activityDate },
       },
       "Rep ID": {
-        rich_text: [{ text: { content: repIdStr } }],
+        rich_text: [{ text: { content: repDisplayName } }],
       },
     };
 
@@ -781,9 +805,9 @@ export class DealsService {
         rich_text: [{ text: { content: input.contactPhone.trim() } }],
       };
     }
-    if (input.scheduledTime) {
+    if (formatted12hTime) {
       properties["Scheduled Time"] = {
-        rich_text: [{ text: { content: input.scheduledTime.trim() } }],
+        rich_text: [{ text: { content: formatted12hTime } }],
       };
     }
 
@@ -800,7 +824,7 @@ export class DealsService {
     if (input.type === "Call" && this.bot && repIdStr) {
       try {
         const chatId = Number.isInteger(Number(repIdStr)) ? Number(repIdStr) : repIdStr;
-        const timePart = input.scheduledTime ? ` at ${input.scheduledTime}` : "";
+        const timePart = formatted12hTime ? ` at ${formatted12hTime}` : "";
         const contactPart = input.contactPerson
           ? `\n• *Contact:* ${input.contactPerson}${input.contactPhone ? ` (${input.contactPhone})` : ""}`
           : "";
@@ -859,7 +883,7 @@ export class DealsService {
     return {
       pageId: page.id,
       type: input.type,
-      content: input.content.trim(),
+      content: (input.content || (input as any).notes || "").trim(),
       activityDate,
       scheduledTime: input.scheduledTime || null,
       repId: repIdStr,

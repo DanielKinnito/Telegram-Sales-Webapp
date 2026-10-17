@@ -4,12 +4,14 @@ import {
   getBot,
   parseManagerChatIds,
   setBotReportsService,
+  setBotLeadsService,
   DEFAULT_BOT_COMMANDS,
   MANAGER_BOT_COMMANDS,
 } from "./modules/bot/bot.js";
 import { getTinCache } from "./modules/leads/tinCache.js";
 import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
+import { LeadsService } from "./modules/leads/leadsService.js";
 import { CronService } from "./modules/cron/cronService.js";
 import { startScheduler } from "./modules/cron/scheduler.js";
 import { ReportsService } from "./modules/reports/reportsService.js";
@@ -33,6 +35,14 @@ if (env.NODE_ENV !== "test") {
     .catch((err) => {
       console.warn("⚠️ TIN cache warmup error:", err.message);
     });
+
+  const leadsService = new LeadsService({
+    notionClient,
+    salesRepsService,
+    tinCache,
+    accountsDbId: env.NOTION_ACCOUNTS_DB_ID,
+  });
+  setBotLeadsService(leadsService);
 
   const reportsService = new ReportsService({
     notionClient,
