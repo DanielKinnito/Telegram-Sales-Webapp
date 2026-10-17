@@ -193,15 +193,21 @@ export function createBot(options: CreateBotOptions = {}) {
 
       // Verify user is registered & active
       const isManagerChat = managerChatIds.includes(userId);
+      let isManagerRole = false;
       let isApprovedRep = false;
       try {
         const rep = await salesRepsService.findSalesRepByTelegramId(userId);
         if (rep && rep.status === "Active") {
           isApprovedRep = true;
+          if (rep.role === "Manager") {
+            isManagerRole = true;
+          }
         }
       } catch {}
 
-      if (!isManagerChat && !isApprovedRep) {
+      const isManager = isManagerChat || isManagerRole;
+
+      if (!isManager && !isApprovedRep) {
         await ctx.reply("Access Restricted: Please complete registration via /start and await manager approval to use CRM tools.");
         return;
       }
@@ -262,8 +268,12 @@ export function createBot(options: CreateBotOptions = {}) {
             await ctx.reply("Available. Register this account by heading to the app.");
           }
         } else {
-          const takenBy = result.conflict?.ownerName || (result.conflict as any)?.assignedRepName || "another Sales person";
-          await ctx.reply(`Not available. Taken by ${takenBy}.`);
+          if (isManager) {
+            const takenBy = result.conflict?.ownerName || (result.conflict as any)?.assignedRepName || "another Sales person";
+            await ctx.reply(`Not available. Taken by ${takenBy}.`);
+          } else {
+            await ctx.reply("Not available.");
+          }
         }
       } catch (err: any) {
         await ctx.reply(`Error checking TIN: ${err.message}`);
