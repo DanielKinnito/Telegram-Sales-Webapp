@@ -66,6 +66,23 @@ if (env.NODE_ENV !== "test") {
       for (const mgrId of managerChatIds) {
         bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
       }
+
+      // 3. Configure Persistent Menu Button if WEBAPP_URL is present
+      if (env.WEBAPP_URL && env.WEBAPP_URL.startsWith("https://")) {
+        bot.api
+          .setChatMenuButton({
+            menu_button: {
+              type: "web_app",
+              text: "💼 Open CRM",
+              web_app: {
+                url: env.WEBAPP_URL,
+              },
+            },
+          })
+          .catch((err) => {
+            console.warn("⚠️ Could not update Telegram menu button:", err.message);
+          });
+      }
     },
   }).catch((err) => {
     console.error("❌ Failed to launch Telegram bot:", err);

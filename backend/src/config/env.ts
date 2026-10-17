@@ -33,7 +33,11 @@ export const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 export function validateEnv(rawEnv: Record<string, unknown>): Env {
-  const parsed = envSchema.safeParse(rawEnv);
+  const effectiveRaw = {
+    ...rawEnv,
+    WEBAPP_URL: rawEnv.WEBAPP_URL || rawEnv.RENDER_EXTERNAL_URL,
+  };
+  const parsed = envSchema.safeParse(effectiveRaw);
   if (!parsed.success) {
     const errorMessages = parsed.error.issues
       .map((issue) => `[${issue.path.join(".") || "root"}]: ${issue.message}`)

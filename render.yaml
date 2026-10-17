@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: telegram-sales-crm
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_PARENT_PAGE_ID
+        sync: false
+      - key: NOTION_SALES_REPS_DB_ID
+        sync: false
+      - key: NOTION_ACCOUNTS_DB_ID
+        sync: false
+      - key: NOTION_DEALS_DB_ID
+        sync: false
+      - key: NOTION_CONTACTS_DB_ID
+        sync: false
+      - key: NOTION_SALES_LOGS_DB_ID
+        sync: false
+      - key: NOTION_QUEUE_DB_ID
+        sync: false
+      - key: NOTION_REPORTS_DB_ID
+        sync: false
+      - key: STORAGE_PROVIDER
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_BUCKET_NAME
+        value: payment-proofs
+      - key: TELEGRAM_MANAGER_CHAT_IDS
+        sync: false
