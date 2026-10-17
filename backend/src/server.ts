@@ -73,9 +73,18 @@ if (env.NODE_ENV !== "test") {
       });
 
       // 2. Scoped manager commands - only visible to authorized Executive Managers
-      for (const mgrId of managerChatIds) {
-        bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
-      }
+      salesRepsService
+        .getActiveManagerChatIds(managerChatIds)
+        .then((allManagerIds) => {
+          for (const mgrId of allManagerIds) {
+            bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
+          }
+        })
+        .catch(() => {
+          for (const mgrId of managerChatIds) {
+            bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
+          }
+        });
 
       // 3. Configure Persistent Menu Button if WEBAPP_URL is present
       if (env.WEBAPP_URL && env.WEBAPP_URL.startsWith("https://")) {

@@ -618,7 +618,11 @@ export class ReportsService {
 
     // 7. Dispatch Telegram Notification to Managers
     let managersNotified = 0;
-    if (this.bot && this.managerChatIds.length > 0) {
+    const managerIds = this.salesRepsService?.getActiveManagerChatIds
+      ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
+      : this.managerChatIds;
+
+    if (this.bot && managerIds.length > 0) {
       const telegramMessage =
         `*Weekly Executive Sales Report Published*\n\n` +
         `• *Reporting Period:* ${periodString}\n` +
@@ -629,7 +633,7 @@ export class ReportsService {
         `📄 [Open Formal Report in Notion](${reportUrl})\n\n` +
         `_To export to PDF: Open the document in Notion, click '...' at the top-right, and select 'Export as PDF'._`;
 
-      for (const chatId of this.managerChatIds) {
+      for (const chatId of managerIds) {
         try {
           await this.bot.api.sendMessage(chatId, telegramMessage, { parse_mode: "Markdown" });
           managersNotified++;

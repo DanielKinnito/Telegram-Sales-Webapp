@@ -162,6 +162,33 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
         expect.anything()
       );
     });
+
+    it("dynamically queries active Notion managers via salesRepsService and sends alerts to them", async () => {
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "Awash Wine Supply Deal" }] },
+          "Amount": { number: 450000 },
+          "Stage": { select: { name: "Proposal" } },
+        },
+      });
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+
+      mockSalesRepsService.getActiveManagerChatIds = vi.fn().mockResolvedValue([555001, 555002, 555003]);
+
+      const result = await service.submitPaymentProof({
+        dealId: "deal_p1",
+        depositRef: "FT2610234812",
+        proofUrl: "https://cbe.et/tx/FT2610234812",
+        submittedByName: "Samuel Green",
+      });
+
+      expect(mockSalesRepsService.getActiveManagerChatIds).toHaveBeenCalledWith([10001, 10002]);
+      expect(result.managersNotified).toBe(3);
+      expect(mockBot.api.sendMessage).toHaveBeenCalledWith(555001, expect.anything(), expect.anything());
+      expect(mockBot.api.sendMessage).toHaveBeenCalledWith(555002, expect.anything(), expect.anything());
+      expect(mockBot.api.sendMessage).toHaveBeenCalledWith(555003, expect.anything(), expect.anything());
+    });
   });
 
   describe("updateDealStage", () => {

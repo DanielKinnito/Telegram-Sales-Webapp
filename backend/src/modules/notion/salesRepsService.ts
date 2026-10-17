@@ -21,6 +21,10 @@ export interface CreateSalesRepInput {
 }
 
 export class SalesRepsService {
+  private cachedManagerChatIds: number[] | null = null;
+  private managerCacheExpiresAt: number = 0;
+  public static readonly MANAGER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   constructor(
     private readonly notionClient: ResilientNotionClient,
     private readonly databaseId: string = env.NOTION_SALES_REPS_DB_ID
@@ -175,5 +179,101 @@ export class SalesRepsService {
         },
       },
     });
+    this.invalidateManagerCache();
+  }
+
+  /**
+   * Invalidate the active manager cache (e.g. on role/status change or manual refresh).
+   */
+  public invalidateManagerCache(): void {
+    this.cachedManagerChatIds = null;
+    this.managerCacheExpiresAt = 0;
+  }
+
+  /**
+   * Dynamically query active Executive Managers from the Notion Sales Reps database.
+   * Caches results in memory for 5 minutes to respect Notion's 3 req/sec rate limit.
+   * Merges with any provided fallback static IDs (e.g. from .env) and deduplicates.
+   */
+  public async getActiveManagerChatIds(fallbackIds: number[] = []): Promise<number[]> {
+    const now = Date.now();
+    if (this.cachedManagerChatIds && now < this.managerCacheExpiresAt) {
+      return Array.from(new Set([...this.cachedManagerChatIds, ...fallbackIds]));
+    }
+
+    try {
+      const response = (await this.notionClient.queryDatabase(this.databaseId, {
+        filter: {
+          and: [
+            {
+              property: "Status",
+              select: {
+                equals: "Active",
+              },
+            },
+            {
+              property: "Role",
+              select: {
+                equals: "Manager",
+              },
+            },
+          ],
+        },
+      })) as { results: any[] };
+
+      const managerIds: number[] = [];
+      for (const page of response?.results || []) {
+        const props = page.properties;
+        const tidStr =
+          props?.["Telegram User ID"]?.rich_text?.[0]?.plain_text ||
+          props?.["Telegram ID"]?.rich_text?.[0]?.plain_text ||
+          props?.["Telegram ID"]?.title?.[0]?.plain_text;
+
+        if (tidStr) {
+          const num = parseInt(tidStr.trim(), 10);
+          if (!isNaN(num) && num > 0) {
+            managerIds.push(num);
+          }
+        }
+      }
+
+      this.cachedManagerChatIds = managerIds;
+      this.managerCacheExpiresAt = now + SalesRepsService.MANAGER_CACHE_TTL_MS;
+
+      return Array.from(new Set([...managerIds, ...fallbackIds]));
+    } catch (err: any) {
+      console.error("Failed to query active managers from Notion, using cached/fallback IDs:", err?.message);
+      if (this.cachedManagerChatIds && this.cachedManagerChatIds.length > 0) {
+        return Array.from(new Set([...this.cachedManagerChatIds, ...fallbackIds]));
+      }
+      return Array.from(new Set(fallbackIds));
+    }
+  }
+
+  /**
+   * Check if a Telegram user ID is an authorized active Executive Manager.
+   * Checks fallback IDs, cached Notion managers, and live record fallback.
+   */
+  public async isManager(telegramId: number | string, fallbackIds: number[] = []): Promise<boolean> {
+    const numId = typeof telegramId === "number" ? telegramId : parseInt(telegramId.toString().trim(), 10);
+    if (!isNaN(numId) && fallbackIds.includes(numId)) {
+      return true;
+    }
+
+    const managerIds = await this.getActiveManagerChatIds(fallbackIds);
+    if (!isNaN(numId) && managerIds.includes(numId)) {
+      return true;
+    }
+
+    // Direct rep check in case role was just changed in Notion before cache expiration
+    try {
+      const rep = await this.findSalesRepByTelegramId(telegramId);
+      if (rep && rep.status === "Active" && rep.role === "Manager") {
+        this.invalidateManagerCache();
+        return true;
+      }
+    } catch {}
+
+    return false;
   }
 }

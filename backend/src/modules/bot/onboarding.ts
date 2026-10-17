@@ -207,6 +207,18 @@ export class OnboardingController {
 
     // 2. Manager Approval
     if (data.startsWith("mgr_approve:")) {
+      const userId = ctx.from?.id;
+      if (userId && this.salesRepsService?.isManager) {
+        const isAuthorized = await this.salesRepsService.isManager(userId, this.managerChatIds);
+        if (!isAuthorized) {
+          await ctx.answerCallbackQuery?.({
+            text: "Permission Denied: Only active Executive Managers can approve or reject sales representatives.",
+            show_alert: true,
+          });
+          return;
+        }
+      }
+
       const parts = data.split(":");
       const pageId = parts[1];
       const repTelegramId = parts[2];
@@ -233,6 +245,18 @@ export class OnboardingController {
 
     // 3. Manager Rejection
     if (data.startsWith("mgr_reject:")) {
+      const userId = ctx.from?.id;
+      if (userId && this.salesRepsService?.isManager) {
+        const isAuthorized = await this.salesRepsService.isManager(userId, this.managerChatIds);
+        if (!isAuthorized) {
+          await ctx.answerCallbackQuery?.({
+            text: "Permission Denied: Only active Executive Managers can approve or reject sales representatives.",
+            show_alert: true,
+          });
+          return;
+        }
+      }
+
       const parts = data.split(":");
       const pageId = parts[1];
       const repTelegramId = parts[2];
@@ -262,7 +286,11 @@ export class OnboardingController {
    * Send notification to all configured managers with inline approval buttons.
    */
   private async notifyManagers(rep: { pageId: string; telegramId: string; fullName: string; phone: string; role: string }, ctx: Context): Promise<void> {
-    if (!this.managerChatIds || this.managerChatIds.length === 0) {
+    const managerIds = this.salesRepsService?.getActiveManagerChatIds
+      ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
+      : this.managerChatIds;
+
+    if (!managerIds || managerIds.length === 0) {
       console.log(`[Manager Alert] New Rep Pending Approval: ${rep.fullName} (${rep.role}), Telegram ID: ${rep.telegramId}`);
       return;
     }
@@ -273,7 +301,7 @@ export class OnboardingController {
 
     const text = `🔔 New Rep Registration Pending Approval:\n\n• Name: ${rep.fullName}\n• Role: ${rep.role}\n• Phone: ${rep.phone}\n• Telegram ID: ${rep.telegramId}`;
 
-    for (const chatId of this.managerChatIds) {
+    for (const chatId of managerIds) {
       try {
         await ctx.api.sendMessage(chatId, text, {
           reply_markup: approvalKeyboard,

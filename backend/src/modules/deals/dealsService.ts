@@ -469,7 +469,11 @@ export class DealsService {
 
     // 3. Dispatch Telegram notifications to Managers
     let managersNotified = 0;
-    if (this.bot && this.managerChatIds.length > 0) {
+    const managerIds = this.salesRepsService?.getActiveManagerChatIds
+      ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
+      : this.managerChatIds;
+
+    if (this.bot && managerIds.length > 0) {
       const amountFormatted =
         dealAmount != null ? `ETB ${Number(dealAmount).toLocaleString()}` : "N/A";
       const submitter = input.submittedByName || "Sales Representative";
@@ -483,7 +487,7 @@ export class DealsService {
         `🔗 [Click to View Bank Transaction Details](${input.proofUrl.trim()})\n\n` +
         `_Open Notion to verify the deposit and move this deal to Won._`;
 
-      for (const chatId of this.managerChatIds) {
+      for (const chatId of managerIds) {
         try {
           await this.bot.api.sendMessage(chatId, message, {
             parse_mode: "Markdown",

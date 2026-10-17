@@ -151,4 +151,93 @@ describe("SalesRepsService", () => {
       });
     });
   });
+
+  describe("getActiveManagerChatIds & isManager", () => {
+    it("queries Notion for active managers and caches results", async () => {
+      (mockNotionClient.queryDatabase as any).mockResolvedValue({
+        results: [
+          {
+            id: "mgr_page_1",
+            properties: {
+              "Telegram User ID": { rich_text: [{ plain_text: "777001" }] },
+              "Role": { select: { name: "Manager" } },
+              "Status": { select: { name: "Active" } },
+            },
+          },
+          {
+            id: "mgr_page_2",
+            properties: {
+              "Telegram ID": { rich_text: [{ plain_text: "777002" }] },
+              "Role": { select: { name: "Manager" } },
+              "Status": { select: { name: "Active" } },
+            },
+          },
+        ],
+      });
+
+      const managerIds = await service.getActiveManagerChatIds([999001]);
+
+      expect(managerIds).toContain(777001);
+      expect(managerIds).toContain(777002);
+      expect(managerIds).toContain(999001);
+
+      // Verify filter passed to Notion
+      expect(mockNotionClient.queryDatabase).toHaveBeenCalledWith(
+        mockDbId,
+        expect.objectContaining({
+          filter: {
+            and: [
+              { property: "Status", select: { equals: "Active" } },
+              { property: "Role", select: { equals: "Manager" } },
+            ],
+          },
+        })
+      );
+
+      // Second call should hit in-memory cache without calling Notion again
+      (mockNotionClient.queryDatabase as any).mockClear();
+      const cachedManagerIds = await service.getActiveManagerChatIds([999001]);
+      expect(mockNotionClient.queryDatabase).not.toHaveBeenCalled();
+      expect(cachedManagerIds).toEqual(managerIds);
+
+      // After cache invalidation, next call queries Notion again
+      service.invalidateManagerCache();
+      await service.getActiveManagerChatIds([999001]);
+      expect(mockNotionClient.queryDatabase).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to fallbackIds if Notion query fails", async () => {
+      service.invalidateManagerCache();
+      (mockNotionClient.queryDatabase as any).mockRejectedValue(new Error("Notion network timeout"));
+
+      const fallbackIds = [888001, 888002];
+      const managerIds = await service.getActiveManagerChatIds(fallbackIds);
+
+      expect(managerIds).toEqual(fallbackIds);
+    });
+
+    it("evaluates isManager correctly for fallback IDs, Notion managers, and non-managers", async () => {
+      service.invalidateManagerCache();
+      (mockNotionClient.queryDatabase as any).mockResolvedValue({
+        results: [
+          {
+            id: "mgr_page_1",
+            properties: {
+              "Telegram User ID": { rich_text: [{ plain_text: "777001" }] },
+            },
+          },
+        ],
+      });
+
+      // 1. Fallback ID from .env
+      expect(await service.isManager(999001, [999001])).toBe(true);
+
+      // 2. Dynamic Notion Manager
+      expect(await service.isManager(777001, [999001])).toBe(true);
+
+      // 3. Regular Rep (not a manager)
+      (mockNotionClient.queryDatabase as any).mockResolvedValueOnce({ results: [] }); // For findSalesRep fallback
+      expect(await service.isManager(12345, [999001])).toBe(false);
+    });
+  });
 });

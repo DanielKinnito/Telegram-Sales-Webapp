@@ -248,6 +248,10 @@ export class CronService {
     let stalledDealsCount = 0;
     let alertsSent = 0;
 
+    const managerIds = this.salesRepsService?.getActiveManagerChatIds
+      ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
+      : this.managerChatIds;
+
     for (const deal of deals) {
       const stage = deal.properties?.["Stage"]?.select?.name || "New";
 
@@ -275,7 +279,7 @@ export class CronService {
         const amountFormatted =
           amount != null ? `ETB ${Number(amount).toLocaleString()}` : "N/A";
 
-        if (this.bot && this.managerChatIds.length > 0) {
+        if (this.bot && managerIds.length > 0) {
           const message =
             `⚠️ *Stalled Deal Alert: 7+ Days Inactivity*\n\n` +
             `• *Deal:* ${title}\n` +
@@ -284,7 +288,7 @@ export class CronService {
             `• *Last Active:* ${daysInactive} days ago\n\n` +
             `_Please contact the client or log an activity update in the Sales Mini App._`;
 
-          for (const chatId of this.managerChatIds) {
+          for (const chatId of managerIds) {
             try {
               await this.bot.api.sendMessage(chatId, message, { parse_mode: "Markdown" });
               alertsSent++;
