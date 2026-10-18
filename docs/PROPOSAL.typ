@@ -122,20 +122,20 @@ Payment verification is streamlined using digital receipts from Ethiopian financ
 )[
 ```mermaid
 graph TD
-    subgraph CurrentState ["Current Status Quo: Manual Delays"]
-        A1["Rep meets prospect on site"] --> B1["Posts company name in group chat"]
-        B1 --> C1["Waits 1 to 4 hours for replies"]
-        C1 --> D1{"Does everyone respond?"}
-        D1 -- "No" --> E1["Account collision & commission dispute"]
-        D1 -- "Yes" --> F1["Delayed outreach & lost momentum"]
+    subgraph CurrentState ["Status Quo: Manual Group Chat Verification"]
+        A1["Rep meets prospect<br/>on client site"] --> B1["Posts company name<br/>in group chat"]
+        B1 --> C1["Waits 1 to 4 hours<br/>for team replies"]
+        C1 --> D1{"Does everyone<br/>reply in time?"}
+        D1 -- "No" --> E1["Account Collision &<br/>Commission Dispute"]
+        D1 -- "Yes" --> F1["Delayed Outreach &<br/>Lost Deal Momentum"]
     end
 
-    subgraph ProposedState ["Platform Workflow: Instant Verification"]
-        A2["Rep meets prospect on site"] --> B2["Inputs 10-digit TIN in Mini App"]
-        B2 --> C2["System checks database in < 100ms"]
-        C2 --> D2{"TIN already registered?"}
-        D2 -- "Yes" --> E2["Registration blocked with owner details"]
-        D2 -- "No" --> F2["Instant ownership & deal created in Notion"]
+    subgraph ProposedState ["Platform: Automated Instant Verification"]
+        A2["Rep meets prospect<br/>on client site"] --> B2["Enters 10-digit TIN<br/>(Mini App or /checktin)"]
+        B2 --> C2["In-Memory Cache Check<br/>(< 100ms response)"]
+        C2 --> D2{"TIN already<br/>registered?"}
+        D2 -- "Yes" --> E2["Registration Blocked<br/>(Conflict Prevented)"]
+        D2 -- "No" --> F2["Instant Ownership &<br/>Deal Created in Notion"]
     end
 ```
 ] <fig-workflow-comparison>
@@ -148,12 +148,13 @@ graph TD
   fill: (col, row) => if row == 0 { rgb("f1f5f9") } else { none },
   align: (col, row) => if row == 0 { center + horizon } else { left + horizon },
   [*Operational Area*], [*Current Status Quo*], [*Target Platform State*], [*Business Impact*],
-  [Lead Conflict Resolution], [30 mins to 4 hours waiting for chat replies], [Under 100 ms via in-memory lookup], [Eliminates account collisions and commission disputes],
-  [Walk-In Lead Assignment], [15 to 45 mins of calls and lobby waiting], [Under 3 seconds via automated queue], [Impartial distribution; zero lobby wait time for visitors],
-  [Payment Verification], [24 to 72 hours matching slips to statements], [Instant push alert with bank link], [Same-day audit; orders released within minutes],
-  [Pipeline Reporting], [4 to 8 hours weekly compiling spreadsheets], [Real-time Kanban pipeline in Notion], [Eliminates manual weekly sales reporting],
-  [Daily Sales Routine], [Irregular, informal morning check-ins], [Automated 09:00 AM EAT Telegram briefings], [Daily follow-ups and due calls delivered to reps],
-  [Stalled Deal Intervention], [End-of-month manual reviews], [Automated 7-day inactivity alerts to managers], [Earlier intervention on at-risk deals],
+  [Lead Conflict Resolution], [30 mins to 4 hours waiting for chat replies], [Under 100ms via Mini App & /checktin command], [Eliminates account collisions and protects rep confidentiality],
+  [Walk-In Lead Assignment], [15 to 45 mins of calls and lobby waiting], [Under 3 seconds via automated round-robin], [Impartial distribution; zero lobby wait time for visiting prospects],
+  [Payment Verification], [24 to 72 hours matching slips to statements], [Instant push alert with direct bank link], [Same-day audit; orders released within minutes],
+  [Pipeline & Executive Reporting], [4 to 8 hours weekly compiling spreadsheets], [Automated Friday 17:00 Notion report & /weekly_report], [Real-time executive visibility with zero manual reporting overhead],
+  [Field Data Safety], [Accidental app closure loses half-typed forms], [Continuous LocalStorage draft save & exit protection], [Zero lost lead data on mobile devices during client visits],
+  [Daily Sales Routine], [Irregular, informal morning check-ins], [Automated 09:00 AM EAT Telegram briefings & call alerts], [Daily follow-ups and due calls delivered punctually to reps],
+  [Stalled Deal Intervention], [End-of-month manual reviews], [Automated 7-day inactivity alerts to managers], [Earlier management intervention on at-risk deals],
 )
 
 = Technical Architecture & Infrastructure
@@ -173,47 +174,54 @@ Data is stored in Notion as a relational CRM. This gives management access to Ka
 )[
 ```mermaid
 graph TB
-    subgraph ClientTier ["Client Interface Layer"]
-        TMA["Telegram Mini App (React 19 + Vite 8)<br/>Mobile Interface & Telegram SDK"]
-        TG_BOT["Telegram Bot (GrammY Engine)<br/>Staff Onboarding & Manager Alerts"]
+    subgraph ClientTier ["1. Client Interface Layer"]
+        TMA["Telegram Mini App (React 19 + Vite 8)<br/>• Mobile UI & TWA SDK<br/>• LocalStorage Draft Auto-Save"]
+        TG_BOT["Telegram Bot (GrammY Engine)<br/>• Onboarding & Direct /checktin<br/>• Scoped /weekly_report & Alerts"]
     end
 
-    subgraph SecurityGateway ["Security Gateway"]
-        HMAC_GUARD["HMAC-SHA256 Auth Middleware<br/>Signature & Expiration Validation"]
+    subgraph SecurityGateway ["2. Security Gateway"]
+        HMAC_GUARD["HMAC-SHA256 Auth Guard<br/>• Cryptographic Hash Validation<br/>• 24h Expiration Enforcement"]
     end
 
-    subgraph ServiceLayer ["Backend Service Layer (Express 5)"]
-        AUTH_SVC["Authentication & Profile Service"]
+    subgraph ServiceLayer ["3. Backend Application Tier (Node.js & Express 5)"]
+        AUTH_SVC["Auth & Dynamic Manager Discovery"]
         LEADS_SVC["Leads & TIN Validation Service"]
         QUEUE_SVC["Rotational Queue Service"]
         DEALS_SVC["Deals & Payment Service"]
-        CRON_SVC["East Africa Time Cron Workers"]
-        TIN_CACHE[("In-Memory TIN Cache")]
-        STORAGE_ADP["Modular Storage Adapter"]
+        REPORTS_SVC["Automated Notion Reports Engine"]
+        CRON_SVC["Addis Ababa (EAT) Cron Workers"]
+        TIN_CACHE[("In-Memory TIN Cache<br/>Sub-100ms Lookups")]
+        STORAGE_ADP["Modular Cloud Storage Adapter"]
     end
 
-    subgraph DatastoreTier ["CRM Datastore Layer (Notion API v5)"]
-        RESILIENT_CLIENT["Resilient Notion Client (3 req/sec Rate Limiter)"]
-        DB_REPS[("Sales Reps DB")]
-        DB_ACCOUNTS[("Accounts DB (TIN Unique)")]
-        DB_DEALS[("Deals & Pipeline DB")]
-        DB_QUEUE[("Rotational Queue DB")]
-        DB_LOGS[("Sales Logs DB")]
-        DB_CONTACTS[("Contacts DB")]
+    subgraph DatastoreTier ["4. CRM Datastore Layer (Notion API v5)"]
+        RESILIENT_CLIENT["Resilient Notion Client Wrapper<br/>3 req/sec Rate Limiter & Backoff"]
+        DB_REPS[("Sales Reps DB<br/>(Full Names & Roles)")]
+        DB_ACCOUNTS[("Accounts DB<br/>(10-Digit TIN Unique)")]
+        DB_DEALS[("Deals & Pipeline DB<br/>(Payment Proof URLs)")]
+        DB_QUEUE[("Rotational Queue DB<br/>(Availability & Timestamp)")]
+        DB_LOGS[("Sales Logs DB<br/>(12h EAT Timestamps)")]
+        DB_REPORTS[("Executive Reports DB<br/>(Weekly Sales Summaries)")]
     end
 
-    TMA -->|"Authorization: tma <initData>"| HMAC_GUARD
+    subgraph HostingTier ["5. 24/7 Production Cloud Infrastructure"]
+        RENDER_SVC["Render Cloud Web Service<br/>Continuous Healthcheck (/health)"]
+        CF_TUNNEL["Cloudflare Zero-Trust Tunnel<br/>Webhook Ingress Routing"]
+    end
+
+    TMA -->|"HMAC Header"| HMAC_GUARD
     HMAC_GUARD --> AUTH_SVC
     HMAC_GUARD --> LEADS_SVC
     HMAC_GUARD --> QUEUE_SVC
     HMAC_GUARD --> DEALS_SVC
 
-    TG_BOT <-->|"Bot Updates & Alerts"| ServiceLayer
+    TG_BOT <-->|"Bot Events"| ServiceLayer
 
     LEADS_SVC <--> TIN_CACHE
     LEADS_SVC --> RESILIENT_CLIENT
     QUEUE_SVC --> RESILIENT_CLIENT
     DEALS_SVC --> RESILIENT_CLIENT
+    REPORTS_SVC --> RESILIENT_CLIENT
     CRON_SVC --> RESILIENT_CLIENT
     DEALS_SVC -.-> STORAGE_ADP
 
@@ -222,30 +230,36 @@ graph TB
     RESILIENT_CLIENT --> DB_DEALS
     RESILIENT_CLIENT --> DB_QUEUE
     RESILIENT_CLIENT --> DB_LOGS
-    RESILIENT_CLIENT --> DB_CONTACTS
+    RESILIENT_CLIENT --> DB_REPORTS
 
-    QUEUE_SVC -->|"Rep Push Notification"| TG_BOT
-    DEALS_SVC -->|"Manager Audit Alert"| TG_BOT
-    CRON_SVC -->|"Morning Briefing & Inactivity Alerts"| TG_BOT
+    QUEUE_SVC -->|"Push Alert"| TG_BOT
+    DEALS_SVC -->|"Audit Alert"| TG_BOT
+    CRON_SVC -->|"Daily Briefing"| TG_BOT
+    REPORTS_SVC -->|"Report Alert"| TG_BOT
+
+    RENDER_SVC --- ServiceLayer
+    CF_TUNNEL --- RENDER_SVC
 ```
 ] <fig-system-architecture>
 
 == Technology Stack
 
-- *Frontend Client:* Built with React 19, TypeScript, and Vite 8. The UI uses standard mobile design conventions with Tailwind CSS v4, supporting touch gestures, clear card layouts, and responsive navigation. Telegram integration is handled by `@telegram-apps/sdk-react` v3.3.9.
-- *Backend Application:* Runs on Node.js using Express 5. Telegram bot commands, conversational onboarding, and notification alerts use GrammY (`grammy` v1.46.0). Automated background jobs use `node-cron` scheduled in East Africa Time (`Africa/Addis_Ababa`, UTC+3).
-- *CRM Datastore:* Hosted in Notion via `@notionhq/client` v5.27.0. A custom client wrapper enforces a strict limit of 3 requests per second to comply with Notion API limits, with exponential backoff retries for transient errors. Instant duplicate TIN lookups are handled by an in-memory cache loaded at server startup.
+- *Frontend Client:* Built with React 19, TypeScript, and Vite 8. The UI uses standard mobile design conventions with Tailwind CSS v4, supporting touch gestures, clear card layouts, and responsive navigation. Telegram integration is handled by `@telegram-apps/sdk-react` v3.3.9. Form state is protected by continuous `localStorage` draft auto-save and native Telegram exit protection confirmation.
+- *Backend Application:* Runs on Node.js using Express 5. Telegram bot commands, conversational onboarding, and notification alerts use GrammY (`grammy` v1.46.0). Features direct bot commands including `/checktin` (with privacy masking for reps) and `/weekly_report` (restricted exclusively to managers via `BotCommandScopeChat`). Automated background jobs use `node-cron` scheduled in East Africa Time (`Africa/Addis_Ababa`, UTC+3).
+- *CRM Datastore:* Hosted in Notion via `@notionhq/client` v5.27.0. A custom client wrapper enforces a strict limit of 3 requests per second to comply with Notion API limits, with exponential backoff retries for transient errors. Instant duplicate TIN lookups are handled by an in-memory cache loaded at server startup. Active managers are discovered dynamically from the Notion roster with cached fallback. All relations display human-readable representative names, and consultation logs use 12-hour AM/PM formatting.
+- *Reporting Engine:* Automated weekly executive report generator that compiles deals won, closed revenue (ETB), active pipeline stages, and representative performance into a dedicated Notion page every Friday at 17:00 EAT or on demand via `/weekly_report`, formatted for PDF export.
+- *Production Hosting & Deployment:* Deployed 24/7 on Render cloud web services (`render.yaml`) with native automated health monitoring (`/health`). Webhook routing and development tunneling use Cloudflare zero-trust tunnels.
 - *File Storage:* Storage uses an adapter interface configured for Supabase Storage (`@supabase/supabase-js` v2.117.3), with drop-in support for AWS S3 and Cloudflare R2.
 
 = Operational Workflows
 
-== Staff Onboarding and Access Control
+== Staff Onboarding, Dynamic Role Discovery, and Access Control
 
-Access is restricted to authorized team members. When a new sales representative or receptionist opens the company Telegram bot and sends `/start`, the system checks the `Sales Reps DB`. If the user is not found, the bot guides them through registration. The user enters their full name, shares their phone number, and selects their role.
+Access is strictly governed by role-based permissions synchronized with Notion. When a new team member opens the company Telegram bot and sends `/start`, the system checks the `Sales Reps DB`. If the user is unlisted, the bot prompts for their full legal name, phone number, and desired operational role (`Sales Rep`, `Receptionist`, or `Manager`).
 
-The system creates a pending record in Notion and sends an approval alert with action buttons to executive managers on Telegram. Until a manager approves the account, the user cannot access the Mini App. Once approved, the record status updates to active in Notion, and the bot notifies the user that their account is ready.
+The system initializes a pending record in Notion and immediately dispatches an alert with inline `[Approve]` and `[Reject]` action buttons to executive managers on Telegram. To prevent configuration lag, the platform features *Dynamic Notion-Driven Manager Discovery*: active managers are retrieved directly from the Notion roster with in-memory TTL caching and fallback, meaning promotions, reassignments, or roster adjustments made in Notion apply instantly across Telegram notification channels without server restarts.
 
-Every API request from the Mini App is verified using HMAC-SHA256 signature checking. The backend verifies the session hash against the bot token, confirms that the request has not been tampered with, and checks that the session timestamp is less than 24 hours old. User identity is taken strictly from the verified signature, ignoring any user IDs passed in plain request bodies.
+Every API request from the Mini App is validated using HMAC-SHA256 signature verification against the bot token. Sessions exceeding 24 hours are rejected. User identity is extracted exclusively from the cryptographically verified signature.
 
 #figure(
   caption: [Staff Onboarding and Cryptographic HMAC Authentication Flow],
@@ -255,79 +269,87 @@ sequenceDiagram
     autonumber
     actor Staff as New Team Member
     participant Bot as Corporate Telegram Bot
-    participant Backend as Backend Gateway
+    participant Backend as Gateway & Manager Discovery
     participant Notion as Notion (Sales Reps DB)
     actor Mgr as Executive Manager
     actor Rep as Active Representative
     participant TMA as Telegram Mini App
 
     Staff->>Bot: Sends /start
-    Bot->>Notion: Checks Telegram ID in Sales Reps DB
-    Notion-->>Bot: No record found
-    Bot-->>Staff: Prompts for Name, Phone, and Role
+    Bot->>Notion: Checks Telegram ID in Reps DB
+    Notion-->>Bot: No active record
+    Bot-->>Staff: Prompts for Name, Phone, Role
     Staff->>Bot: Submits profile information
-    Bot->>Notion: Creates record (Status = Pending Approval)
-    Notion-->>Bot: Record created
-    Bot-->>Staff: Confirms submission is pending approval
-    Bot->>Mgr: Sends alert with [Approve] and [Reject] buttons
+    Bot->>Notion: Creates record (Status = Pending)
+    Notion-->>Bot: Confirmation
+    Bot->>Mgr: Sends alert with [Approve] / [Reject]
     Mgr->>Bot: Clicks [Approve]
     Bot->>Notion: Updates record (Status = Active)
-    Bot-->>Staff: Notifies user that account is approved
+    Bot-->>Staff: Sends approval confirmation
 
-    Note over Rep,TMA: Daily Access via Telegram Mini App
-    Rep->>TMA: Taps 'Open CRM' menu button
-    TMA->>Backend: GET /api/auth/me (Authorization: tma <initData>)
-    Backend->>Backend: Validates HMAC-SHA256 signature
-    Backend->>Notion: Checks representative status
-    Notion-->>Backend: Confirms active status and role
-    Backend-->>TMA: Returns authorized profile data
-    TMA-->>Rep: Displays personalized dashboard
+    Note over Rep,TMA: Daily Authenticated Access
+    Rep->>TMA: Launches Mini App
+    TMA->>Backend: GET /api/auth/me (HMAC Header)
+    Backend->>Backend: Validates HMAC-SHA256 & Expiry
+    Backend->>Notion: Verifies Role & Active Status
+    Notion-->>Backend: Confirms active profile
+    Backend-->>TMA: Returns authorized profile
+    TMA-->>Rep: Renders role-specific workspace
 ```
 ] <fig-staff-onboarding>
 
-== TIN Deduplication and Account Registration
+== Dual-Channel TIN Deduplication, Privacy Filtering, & Draft Auto-Save
 
-The conflict prevention engine uses the 10-digit Taxpayer Identification Number issued to all registered businesses in Ethiopia. The Mini App validates the input format before sending the request, preventing incomplete numbers from reaching the server.
+The platform enforces conflict prevention using the mandatory 10-digit Ethiopian Taxpayer Identification Number (TIN) across two integrated channels:
 
-When a representative enters a TIN, the backend checks the in-memory cache. If the number already exists in the system, the server returns the registered company name, the representative who owns the account, and the original registration date. The Mini App displays this conflict information and blocks registration, preventing duplicate entries.
-
-If the TIN is unassigned, the app confirms availability and allows the representative to enter the company name, address, and industry. When submitted, the backend saves the account to Notion, links the representative as owner, and updates the in-memory cache immediately. This immediate update ensures that if two representatives query the same unassigned company at the same time, the first submission reserves the account, and the second is blocked.
+1. *Direct Telegram Bot Command (`/checktin <tin>`):* Representatives and managers can verify account status directly within Telegram chat without opening the web interface:
+   - *Representative Scope:* If the TIN is taken, the bot responds that the company is already registered while *hiding the owner's name*. This preserves rep privacy, prevents internal customer poaching, and avoids disputes.
+   - *Manager Scope:* When executive managers run `/checktin`, the bot displays full ownership intelligence (assigned representative, company name, registration date), allowing swift management arbitration.
+2. *Mini App TIN Engine & Local Draft Protection:* Within the Mini App, TIN inputs are verified in under 100 milliseconds against the in-memory cache. To safeguard field data on mobile devices, the client features *Continuous LocalStorage Draft Auto-Save* and *Telegram Native Exit Protection*:
+   - All form keystrokes are saved locally in real time.
+   - If a representative accidentally gestures to close Telegram, a native confirmation modal intercepts the exit.
+   - If the app restarts, a prominent "Restore Draft" banner restores all customer notes with a single tap.
 
 #figure(
-  caption: [TIN Deduplication and Account Registration Sequence],
+  caption: [Dual-Channel TIN Deduplication and Account Registration Sequence],
 )[
 ```mermaid
 sequenceDiagram
     autonumber
     actor Rep as Sales Representative
-    participant TMA as Mini App TIN Engine
+    participant Bot as Telegram Bot (/checktin)
+    participant TMA as Mini App & Draft Engine
     participant API as Backend Leads Router
-    participant Cache as In-Memory TinCache
+    participant Cache as In-Memory TIN Cache
     participant Notion as Notion Accounts DB
+    actor Mgr as Executive Manager
 
-    Rep->>TMA: Inputs 10-digit TIN (e.g., 0012345678)
-    TMA->>TMA: Validates 10-digit format
-    TMA->>API: GET /api/leads/check-tin?tin=0012345678
-    API->>API: Sanitizes input
-    API->>Cache: Checks cache for TIN
+    Note over Rep,Bot: Channel A: Instant Chat Check
+    Rep->>Bot: Sends /checktin 0012345678
+    Bot->>Cache: Checks TIN in cache
+    alt TIN Registered (Rep View)
+        Bot-->>Rep: "Already Registered (Owner Hidden)"
+    else TIN Registered (Manager View)
+        Mgr->>Bot: Sends /checktin 0012345678
+        Bot-->>Mgr: "Registered to [Rep Name] on [Date]"
+    end
 
-    alt Account Already Registered
-        Cache-->>API: Returns existing account details
-        API-->>TMA: Returns conflict details (Owner, Company, Date)
-        TMA-->>Rep: Displays conflict card and blocks registration
-    else Unassigned Account
-        Cache-->>API: No record in cache
-        API->>Notion: Queries Accounts DB for TIN
-        Notion-->>API: No matching records found
-        API-->>TMA: Confirms TIN is available
-        TMA-->>Rep: Displays green checkmark and unlocks form
-        Rep->>TMA: Enters company details and taps Register
-        TMA->>API: POST /api/leads with account payload
-        API->>Notion: Creates Account in Notion with Rep as Owner
-        Notion-->>API: Returns new record ID
-        API->>Cache: Adds TIN and metadata to cache
-        API-->>TMA: Returns success response
-        TMA-->>Rep: Displays confirmation and opens deal profile
+    Note over Rep,TMA: Channel B: Mini App Lead Registration
+    Rep->>TMA: Inputs 10-digit TIN in Mini App
+    TMA->>API: GET /api/leads/check-tin
+    API->>Cache: Checks in-memory cache
+    alt Clean / Unassigned TIN
+        API-->>TMA: Confirms TIN Available
+        TMA-->>Rep: Displays green check & unlocks form
+        Rep->>TMA: Types company & contact details
+        TMA->>TMA: Auto-saves draft to LocalStorage
+        Rep->>TMA: Taps 'Register Lead'
+        TMA->>API: POST /api/leads
+        API->>Notion: Creates Account in Notion
+        API->>Cache: Reserves TIN in memory
+        API-->>TMA: Success confirmation
+        TMA->>TMA: Clears saved draft
+        TMA-->>Rep: Opens deal card
     end
 ```
 ] <fig-tin-deduplication>
@@ -411,13 +433,14 @@ sequenceDiagram
 ```
 ] <fig-payment-verification>
 
-== Automated Notifications and Reminders
+== Automated Notifications, Precision Reminders, & Executive Reporting
 
-The platform includes background scheduled jobs running in East Africa Time (UTC+3) to keep daily operations on track without manual monitoring:
+The platform includes background scheduled workers running in East Africa Time (UTC+3) alongside on-demand manager triggers to ensure systematic operational momentum:
 
-- *Daily Follow-Up Briefing (09:00 AM EAT):* Checks the sales logs database for all calls, meetings, and follow-ups scheduled for the current day. The service groups these activities by representative and sends each representative a morning briefing on Telegram with their daily schedule.
-- *Inactivity Sweeper (10:00 AM EAT):* Checks active deals in the pipeline that have not been closed. If a deal has had no logged activity for seven or more days, the service sends an alert to executive managers with the deal title, value, assigned representative, and days of inactivity. Management can then follow up with the representative or reassign the account.
-- *Call Reminders (Every 60 Seconds):* Runs every minute to check for calls scheduled for the current day where a reminder has not yet been sent. When the scheduled minute arrives, the service sends an instant push notification to the representative's phone with the client name, contact number, and call objective.
+- *Daily Follow-Up Briefing (09:00 AM EAT):* Scans the `Sales Logs DB` for all interactions scheduled for the current business day. Activities are organized per representative, and a structured morning agenda is delivered directly to their Telegram chat.
+- *Inactivity Sweeper (10:00 AM EAT):* Audits active pipeline deals. Opportunities without logged activity for seven or more calendar days trigger an executive escalation to managers detailing the deal name, contract value, assigned representative, and days idle.
+- *Precision Call Reminders (Every 60 Seconds):* Evaluates scheduled consultation commitments every minute. At the designated minute, the representative receives an immediate mobile alert with the customer's contact details, phone number, and consultation goals.
+- *Automated Weekly Sales Report (Fridays at 17:00 EAT) & On-Demand `/weekly_report`:* Every Friday at the close of business, the system automatically aggregates closed revenue (ETB), won deals, pipeline stage conversions, and individual rep metrics, compiling an executive report page directly into the Notion CRM. In addition, executive managers can invoke `/weekly_report` at any time from Telegram to compile an immediate real-time report.
 
 #figure(
   caption: [Automated Scheduled Notifications and Inactivity Alert Architecture],
@@ -425,32 +448,38 @@ The platform includes background scheduled jobs running in East Africa Time (UTC
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Cron as Background Scheduler (UTC+3)
-    participant Service as Cron Service
+    participant Cron as EAT Scheduler (node-cron)
+    participant Service as Cron & Reports Engine
     participant Notion as Notion CRM Datastores
     participant Bot as Corporate Telegram Bot
     actor Rep as Sales Representative
     actor Mgr as Executive Manager
 
-    Note over Cron: 09:00 AM East Africa Time (06:00 UTC)
-    Cron->>Service: Triggers Daily Follow-Up Briefing
-    Service->>Notion: Queries Sales Logs DB for today's activities
-    Notion-->>Service: Returns scheduled calls and follow-ups
-    Service->>Service: Groups activities by representative
-    loop For Each Representative
-        Service->>Bot: Sends morning briefing message
-        Bot->>Rep: Delivers daily schedule to rep's Telegram
-    end
+    Note over Cron: 09:00 AM EAT: Daily Briefing
+    Cron->>Service: Triggers morning briefing
+    Service->>Notion: Queries today's scheduled activities
+    Notion-->>Service: Returns activities per rep
+    Service->>Bot: Dispatches morning agenda
+    Bot->>Rep: Delivers daily schedule
 
-    Note over Cron: 10:00 AM East Africa Time (07:00 UTC)
-    Cron->>Service: Triggers Inactivity Sweeper
-    Service->>Notion: Queries Deals DB for active opportunities
-    Notion-->>Service: Returns open deals
-    Service->>Service: Filters deals inactive for 7 or more days
-    loop For Each Inactive Deal
-        Service->>Bot: Sends inactivity alert to management
-        Bot->>Mgr: Delivers alert with deal details and days idle
+    Note over Cron: 10:00 AM EAT: Inactivity Sweeper
+    Cron->>Service: Triggers pipeline audit
+    Service->>Notion: Checks deals inactive >= 7 days
+    Notion-->>Service: Returns stalled deals
+    Service->>Bot: Dispatches management escalation
+    Bot->>Mgr: Delivers stalled deal alert
+
+    Note over Cron,Service: Friday 17:00 EAT / On-Demand (/weekly_report)
+    alt Automated Friday Schedule
+        Cron->>Service: Triggers Friday 17:00 weekly report
+    else Manager On-Demand Command
+        Mgr->>Bot: Sends /weekly_report
+        Bot->>Service: Executes ReportsService.generateReport()
     end
+    Service->>Notion: Aggregates deals, revenue, & rep performance
+    Service->>Notion: Creates formatted Executive Report page
+    Service->>Bot: Sends summary alert with direct report URL
+    Bot->>Mgr: Delivers weekly revenue & pipeline metrics
 ```
 ] <fig-scheduled-notifications>
 
@@ -615,24 +644,47 @@ gantt
 - *Phase 3: User Setup & Testing (Days 11--15):* Register the initial team roster (6 Sales Representatives, 1 Receptionist, 3 Managers), verify HMAC authentication, and test queue assignments and payment link submissions.
 - *Phase 4: Training & Go-Live (Days 16--18):* Distribute the User Operations Field Manual, conduct practical walkthroughs with sales staff and reception, and transition team communication off the informal group chat.
 
-== Commercial Pricing Framework
+== Commercial Investment & Payment Agreement Form
+
+This commercial framework governs the turnkey delivery, licensing, and aftersales maintenance of the B2B Sales Operations Platform.
+
+=== Investment Summary
 
 #table(
-  columns: (1.5fr, 2.5fr, 1.8fr, 2fr),
+  columns: (1.5fr, 2.5fr, 1.5fr, 2fr),
   stroke: 0.5pt + rgb("cbd5e1"),
   fill: (col, row) => if row == 0 { rgb("f1f5f9") } else { none },
   align: (col, row) => if row == 0 { center + horizon } else { left + horizon },
-  [*Item*], [*Scope & Deliverables*], [*Fee Structure*], [*Status / Terms*],
-  [Turnkey Implementation], [Database setup, backend deployment, bot configuration, frontend publishing, and staff onboarding], [Fixed Project Fee], [TBD: Implementation Fee (USD / ETB Amount)],
-  [Platform Licensing], [Complete proprietary source code, intellectual property transfer, and repository access], [Perpetual License], [Included in Project Fee / Perpetual],
-  [Hosting (Cloud)], [Web service execution, CDN distribution, and object storage], [Pass-Through Operating Expense], [Estimated \$15 -- \$35 / Month],
-  [Annual Support & Maintenance], [Bug fixes, platform updates, Notion API maintenance, and 99.9% uptime target], [Annual Agreement], [TBD: Annual Maintenance Fee],
+  [*Item*], [*Scope & Deliverables*], [*Investment*], [*Payment Structure*],
+  [Turnkey System Implementation], [Complete software delivery, Telegram Bot configuration, React Mini App build, Notion CRM setup, Render 24/7 deployment, and staff training], [*ETB 200,000*], [Milestone-Based (Upfront, Delivery, 6-Month Retention)],
+  [Platform Licensing], [Proprietary source code transfer, repository access, and unrestricted perpetual corporate usage], [*Included*], [Perpetual License (Included in System Fee)],
+  [Annual Aftersales Maintenance], [2-month interval proactive maintenance, Notion API adaptation, uptime monitoring, bug resolution, and SLA support], [*ETB 100,000 / year*], [Annual Agreement (Scheduled Bi-Monthly Reviews)],
+  [*Total First-Year Value*], [*Comprehensive Turnkey System + 1 Full Year of Aftersales Maintenance*], [*ETB 300,000*], [*Total Year 1 Commitment*],
 )
 
-*Payment Schedule:*
-- *Milestone 1 (40%):* Project start and environment setup.
-- *Milestone 2 (40%):* Deployment, testing, and staff roster onboarding.
-- *Milestone 3 (20%):* Go-live, staff training, and final acceptance.
+_Note: Infrastructure cloud hosting (Render web services and Cloudflare tunnels) operates as a pass-through operating expense estimated between \$15 and \$35 USD per month._
+
+=== System Implementation Payment Milestones (ETB 200,000)
+
+Payments for the system are staged across three verified delivery milestones:
+
+- *Milestone 1 --- Upfront Project Kickoff Deposit (ETB 50,000 / 25%):*
+  Payable immediately upon contract execution.
+  _Deliverables:_ Environment setup, corporate Telegram bot token provisioning, Notion workspace database creation, and security gateway configuration.
+- *Milestone 2 --- System Delivery, Onboarding & Go-Live Acceptance (ETB 100,000 / 50%):*
+  Payable upon formal go-live acceptance.
+  _Deliverables:_ Production deployment on Render, Mini App publication, initial staff roster registration (6 Sales Reps, 1 Receptionist, 3 Managers), verified end-to-end workflow execution, and staff training completion.
+- *Milestone 3 --- Production Warranty Retention (ETB 50,000 / 25%):*
+  Payable after *six (6) months* of active production operation.
+  _Deliverables:_ Continuous operational verification, resolution of any latent warranty defects, and verified data integrity across the Notion CRM datastores.
+
+=== Aftersales Maintenance & Service Schedule (ETB 100,000 / Year)
+
+Ongoing platform reliability is backed by a structured proactive maintenance plan:
+
+- *2-Month Maintenance Intervals (Bi-Monthly Review Cycles):* A dedicated engineering inspection is conducted every two months to audit in-memory TIN cache efficiency, optimize Notion database relations, review API rate-limit headroom, verify Telegram webhook hygiene, and apply security patches.
+- *Continuous Notion API Adaptation:* Ongoing updates to maintain compatibility with Notion API version enhancements and schema adjustments.
+- *Priority Bug Resolution:* Dedicated engineering support for system anomalies, data reconciliation, or roster adjustments.
 
 == Service Level Agreement
 
@@ -641,7 +693,9 @@ gantt
 - *Severity 2 (Degraded Performance):* Non-critical notifications delayed or report synchronization lag. Response within 4 hours; resolution target within 1 business day.
 - *Severity 3 (General Support):* User roster adjustments or configuration questions. Response within 1 business day.
 
-== Executive Sign-Off
+== Commercial Agreement & Executive Sign-Off
+
+By signing below, the parties agree to the scope, milestones, fees, and service level commitments detailed in this Commercial & Technical Proposal.
 
 #v(8pt)
 #table(

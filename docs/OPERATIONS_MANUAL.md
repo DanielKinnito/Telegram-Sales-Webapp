@@ -40,6 +40,7 @@ Sales representatives interact with the platform directly within Telegram on iOS
 
 Before pitching or registering any prospective enterprise account, representatives must verify that the customer is not actively assigned to a colleague.
 
+#### Method 1: In-App TIN Verification (Mini App)
 1. Navigate to the **TIN Engine** tab in the bottom navigation bar.
 2. Request the customer's legal ten-digit Taxpayer Identification Number (TIN) and enter it into the search field.
 3. The interface enforces numeric formatting and verifies the 10-digit structure (`^\d{10}$`):
@@ -53,7 +54,19 @@ Before pitching or registering any prospective enterprise account, representativ
 4. With the TIN confirmed available, enter the customer's **Company Name**, **Address**, and select the **Industry** from the dropdown menu.
 5. Tap **Register Lead & Create Account**. The system commits the account directly to Notion and locks the TIN in the in-memory cache, preventing any other representative from registering the account.
 
-> **[SCREENSHOT REQUIRED: Sales Mini App TIN Lookup view showing two states: 1) A collision alert banner displaying existing company name, assigned representative name, and registration date; 2) An available state showing the green checkmark and the opened lead creation form with Company Name and Industry fields filled out]**
+#### Method 2: Rapid Telegram Bot Check (`/checktin <tin>`)
+Representatives can quickly check account status without opening the Mini App interface:
+1. In the corporate Telegram bot chat, send `/checktin <10-digit-tin>` (e.g., `/checktin 0012345678`).
+2. **Representative Privacy Filter:**
+   * If available: The bot responds that the TIN is available for registration.
+   * If registered: The bot alerts that the account is already registered, but **masks the owner's name** (`Owner Hidden`). This prevents peer lead poaching and maintains internal privacy.
+
+#### Field Safety: LocalStorage Draft Auto-Save & Exit Protection
+* **Real-Time Draft Preservation:** As you type company or contact notes in the Mini App, keystrokes are automatically persisted to the device's local browser storage.
+* **Accidental Exit Interception:** If you accidentally swipe down or navigate away, Telegram displays a native confirmation prompt (*"Are you sure you want to close this app? Unsaved changes may be lost"*).
+* **One-Tap Draft Recovery:** If your phone runs out of battery, reloads, or closes, reopening the app displays a prominent **Restore Draft** banner. Tap the banner to restore your previously entered data instantly.
+
+> **[SCREENSHOT REQUIRED: Sales Mini App TIN Lookup view showing two states: 1) A collision alert banner displaying existing company name and registration date; 2) An available state showing the green checkmark and the draft restore banner]**
 
 ---
 
@@ -225,6 +238,36 @@ When an active opportunity remains untouched for seven calendar days, leadership
 
 ---
 
+### 4.5 Executive Weekly Sales Reports & Manager Intelligence Commands
+
+Leadership possesses dedicated Telegram intelligence commands restricted exclusively to the `Manager` role via `BotCommandScopeChat`:
+
+#### 1. Instant Account Ownership Inspection (`/checktin <tin>`)
+When commercial conflicts or ownership questions arise:
+1. In Telegram, send `/checktin <10-digit-tin>` (e.g., `/checktin 0012345678`).
+2. **Executive Intelligence View:** Unlike sales representatives (who see the owner masked), managers receive full unmasked ownership telemetry:
+   * Registered Company Name
+   * Assigned Representative Full Name
+   * Exact Timestamp of Account Creation
+   * Direct guidance for reassigning the account if necessary.
+
+#### 2. On-Demand Weekly Sales Report (`/weekly_report`)
+While the platform automatically publishes the executive report every Friday at 17:00 EAT, managers can compile real-time pipeline metrics on demand:
+1. Send `/weekly_report` in the Telegram bot chat.
+2. The engine immediately audits all deals across Notion and replies with an executive digest:
+   * Total Closed-Won Revenue (ETB)
+   * Number of Deals Won This Cycle
+   * Active Pipeline Deal Count & Open Value
+   * Individual Representative Performance Rankings
+3. Tap the included direct link to open the newly generated, beautifully formatted **Executive Weekly Report** page in Notion, ready for executive board review or PDF export.
+
+#### 3. Dynamic Manager Management in Notion
+Executive manager permissions are dynamic and synchronized directly with the Notion database:
+* To grant a new executive access to manager commands, onboarding approvals, and financial alerts, simply update their **Role** to `Manager` in the **Sales Reps DB** in Notion.
+* The backend caches and discovers managers dynamically without requiring server reboots or environment file edits.
+
+---
+
 ## 5. Section D: IT Operations & Turnkey Handover Runbook
 
 This section details the procedures required for the client company's IT operations team to provision, configure, deploy, and maintain the production environment.
@@ -302,17 +345,17 @@ The repository includes automated provisioning scripts that create all six datab
 ### 5.5 Step 4: Hosting Deployment (Web Service & Static CDN)
 
 #### Option A: Render Cloud Deployment (Recommended)
-1. **Backend Web Service:**
-   * Environment: Node.js (Version 22 LTS).
-   * Root Directory: `backend`
-   * Build Command: `npm install`
-   * Start Command: `npm start`
-   * Environment Variables: Insert all completed keys from `.env`.
-2. **Frontend Static Site:**
-   * Root Directory: `frontend`
-   * Build Command: `npm install && npm run build`
-   * Publish Directory: `dist`
-   * Environment Variables: `VITE_API_URL=https://your-backend.onrender.com`
+The repository includes a production `render.yaml` blueprint configuring continuous 24/7 deployment:
+1. **Automated Blueprint Deploy:**
+   * Connect your GitHub repository to [Render](https://render.com).
+   * Select **Blueprints** and point to `render.yaml`.
+   * Render automatically provisions the Express web service with Node.js 22 LTS, health checks (`/health`), and environment variable bindings.
+2. **Local & Webhook Tunneling via Cloudflare:**
+   * To route Telegram webhooks during development or behind corporate firewalls, run the included tunnel script:
+     ```bash
+     npm run tunnel
+     ```
+   * Update the Telegram bot webhook URL to point to your secure Cloudflare tunnel domain.
 
 #### Option B: Docker Container Deployment
 Use the included multi-stage Docker build:
@@ -325,7 +368,7 @@ docker run -d -p 3000:3000 --env-file .env sales-crm-platform:latest
 
 ### 5.6 Step 5: Initial Staff Roster Onboarding
 
-1. Instruct the three Executive Managers to obtain their numeric Telegram User IDs (via `@userinfobot`) and verify they are listed in `TELEGRAM_MANAGER_CHAT_IDS`.
+1. Instruct the three Executive Managers to obtain their numeric Telegram User IDs (via `@userinfobot`) and verify they are listed in `TELEGRAM_MANAGER_CHAT_IDS` or assigned the `Manager` role in the Notion `Sales Reps DB`.
 2. Direct all six Sales Representatives and the Front Desk Receptionist to open the Telegram bot and click `/start`.
 3. Each team member enters their Full Name, Phone Number, and designates their Role.
 4. Executive Managers receive inline notifications on Telegram and tap `✅ Approve` for each team member.
@@ -333,8 +376,13 @@ docker run -d -p 3000:3000 --env-file .env sales-crm-platform:latest
 
 ---
 
-### 5.7 Routine Maintenance & Health Monitoring
+### 5.7 Scheduled Maintenance Plan & Health Telemetry
 
+* **2-Month Proactive Service Intervals:** Every two months, IT engineering conducts routine scheduled audits:
+  * Database index optimization and archive cleanup in Notion.
+  * In-memory TIN cache memory footprint audit and startup load testing.
+  * Notion API rate-limit headroom review (ensuring < 3 req/sec compliance).
+  * Telegram Bot webhook latency inspection and security token rotation.
 * **Health Endpoint:** The backend exposes an unauthenticated health check endpoint at `GET /health` returning service uptime and timestamp telemetry.
 * **TIN Cache Verification:** To inspect cache status, monitor backend logs upon startup for:
   > `💾 In-memory TIN cache warmed up (N registered TINs loaded)`
