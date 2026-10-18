@@ -37,14 +37,14 @@ export function setBotLeadsService(service: LeadsService) {
 export const DEFAULT_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
-  { command: "checktin", description: "Check Ethiopian TIN availability" },
+  { command: "ct", description: "Check Ethiopian TIN availability" },
   { command: "help", description: "Show usage commands" },
 ];
 
 export const MANAGER_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
-  { command: "checktin", description: "Check Ethiopian TIN availability" },
+  { command: "ct", description: "Check Ethiopian TIN availability" },
   { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
   { command: "help", description: "Show usage commands" },
 ];
@@ -175,8 +175,8 @@ export function createBot(options: CreateBotOptions = {}) {
       registeredLeadsService = options.leadsService;
     }
 
-    // 4. /checktin command (Quick TIN conflict check directly from Telegram chat)
-    bot.command(["checktin", "check_tin", "checkTin"], async (ctx) => {
+    // 4. /ct and /checktin command (Quick TIN conflict check directly from Telegram chat)
+    bot.command(["ct", "checktin", "check_tin", "checkTin"], async (ctx) => {
       const userId = ctx.from?.id;
       if (!userId) return;
 
@@ -213,7 +213,7 @@ export function createBot(options: CreateBotOptions = {}) {
           });
           registeredLeadsService = activeLeadsService;
         } catch (err: any) {
-          console.error("Failed to initialize LeadsService for /checktin:", err);
+          console.error("Failed to initialize LeadsService for /ct:", err);
         }
       }
 
@@ -228,7 +228,7 @@ export function createBot(options: CreateBotOptions = {}) {
 
       if (!rawArg) {
         await ctx.reply(
-          "Please provide a 10-digit TIN number to check.\n\nExample:\n/checktin 0012345678"
+          "Please provide a 10-digit TIN number to check.\n\nExample:\n/ct 0012345678"
         );
         return;
       }
@@ -236,7 +236,7 @@ export function createBot(options: CreateBotOptions = {}) {
       const cleanTin = rawArg.replace(/\D/g, "");
       if (cleanTin.length !== 10) {
         await ctx.reply(
-          "Invalid TIN format: Ethiopian TIN must be exactly 10 numeric digits.\nExample: /checktin 0012345678"
+          "Invalid TIN format: Ethiopian TIN must be exactly 10 numeric digits.\nExample: /ct 0012345678"
         );
         return;
       }
@@ -256,12 +256,8 @@ export function createBot(options: CreateBotOptions = {}) {
             await ctx.reply("Available. Register this account by heading to the app.");
           }
         } else {
-          if (isManager) {
-            const takenBy = result.conflict?.ownerName || (result.conflict as any)?.assignedRepName || "another Sales person";
-            await ctx.reply(`Not available. Taken by ${takenBy}.`);
-          } else {
-            await ctx.reply("Not available.");
-          }
+          const takenBy = result.conflict?.ownerName || (result.conflict as any)?.assignedRepName || "another Sales person";
+          await ctx.reply(`Not available. Taken by ${takenBy}.`);
         }
       } catch (err: any) {
         await ctx.reply(`Error checking TIN: ${err.message}`);
@@ -282,7 +278,7 @@ export function createBot(options: CreateBotOptions = {}) {
       "📌 Sales CRM Bot Commands:\n\n" +
       "/start - Check account status & registration\n" +
       "/app - Open the Sales CRM Mini App in Telegram\n" +
-      "/checktin <tin> - Check if an Ethiopian TIN is available\n";
+      "/ct <tin> - Check Ethiopian TIN availability (Quick TIN check)\n";
     if (isManager) {
       text += "/weekly_report - Generate formal Weekly Executive Sales Report in Notion\n";
     }
