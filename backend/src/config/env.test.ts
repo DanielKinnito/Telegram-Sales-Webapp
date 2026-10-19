@@ -79,4 +79,14 @@ describe("Environment Validation", () => {
     expect(result.SUPABASE_ANON_KEY).toBe("sb_publishable_custom_key_123");
     expect(result.SUPABASE_BUCKET_NAME).toBe("custom-receipts");
   });
+
+  it("parses optional NOTION_INVENTORY_DB_ID correctly", () => {
+    const withInventory = {
+      ...validEnv,
+      NOTION_INVENTORY_DB_ID: "db_inventory_test_123",
+    };
+    const result = validateEnv(withInventory);
+    expect(result.NOTION_INVENTORY_DB_ID).toBe("db_inventory_test_123");
+  });
 });
+
