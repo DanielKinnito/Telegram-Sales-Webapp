@@ -60,6 +60,11 @@ describe("Inventory API Endpoints (/api/inventory)", () => {
     const app = createApp({
       inventoryService: mockInventoryService,
       salesRepsService: mockSalesRepsService,
+      bot: {
+        api: {
+          sendMessage: vi.fn().mockResolvedValue({ message_id: 123 }),
+        },
+      },
     });
 
     await new Promise<void>((resolve) => {

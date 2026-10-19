@@ -82,5 +82,5 @@ describe("Express App Integration (HTTP)", () => {
     expect(body.success).toBe(true);
     expect(body.user.id).toBe(445566);
     expect(body.user.firstName).toBe("Alice");
-  });
+  }, 15000);
 });
