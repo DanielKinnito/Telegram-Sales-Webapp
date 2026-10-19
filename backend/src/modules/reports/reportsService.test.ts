@@ -26,20 +26,6 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
       },
     };
 
-    reportsService = new ReportsService({
-      notionClient: mockNotionClient as ResilientNotionClient,
-      salesRepsService: mockSalesRepsService as SalesRepsService,
-      reportsDbId: "test_reports_db",
-      dealsDbId: "test_deals_db",
-      accountsDbId: "test_accounts_db",
-      salesLogsDbId: "test_logs_db",
-      managerChatIds: [12345],
-      bot: mockBot,
-    });
-  });
-
-  it("compiles commercial metrics without emojis or buzzwords and creates report page in Notion", async () => {
-    // Mock Deals: 1 Won, 1 Lost, 1 Proposal
     (mockNotionClient.queryDatabase as any).mockImplementation((dbId: string) => {
       if (dbId === "test_deals_db") {
         return Promise.resolve({
@@ -101,6 +87,20 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
     (mockNotionClient.createPage as any).mockResolvedValue({
       id: "report_page_123",
     });
+
+    reportsService = new ReportsService({
+      notionClient: mockNotionClient as ResilientNotionClient,
+      salesRepsService: mockSalesRepsService as SalesRepsService,
+      reportsDbId: "test_reports_db",
+      dealsDbId: "test_deals_db",
+      accountsDbId: "test_accounts_db",
+      salesLogsDbId: "test_logs_db",
+      managerChatIds: [12345],
+      bot: mockBot,
+    });
+  });
+
+  it("compiles commercial metrics without emojis or buzzwords and creates report page in Notion", async () => {
 
     const result = await reportsService.generateWeeklyReport();
 
@@ -190,5 +190,17 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
         parse_mode: "Markdown",
       })
     );
+  });
+
+  it("skips Telegram broadcast when triggerSource is 'bot' to avoid sending duplicate messages", async () => {
+    (mockBot.api.sendDocument as any).mockClear();
+    (mockBot.api.sendMessage as any).mockClear();
+
+    const result = await reportsService.generateWeeklyReport({ triggerSource: "bot" });
+
+    expect(result.pdfBuffer).toBeInstanceOf(Buffer);
+    expect(mockBot.api.sendDocument).not.toHaveBeenCalled();
+    expect(mockBot.api.sendMessage).not.toHaveBeenCalled();
+    expect(result.managersNotified).toBe(0);
   });
 });

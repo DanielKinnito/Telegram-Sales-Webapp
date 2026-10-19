@@ -892,12 +892,14 @@ export class ReportsService {
     }
 
     // 8. Dispatch Telegram Notification to Managers (with PDF Attachment)
+    // When triggerSource === "bot", the bot command handler (bot.ts) directly replies with the PDF
+    // to the requesting user. We skip the general broadcast here to prevent sending duplicate messages.
     let managersNotified = 0;
     const managerIds = this.salesRepsService?.getActiveManagerChatIds
       ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
       : this.managerChatIds;
 
-    if (this.bot && managerIds.length > 0) {
+    if (options.triggerSource !== "bot" && this.bot && managerIds.length > 0) {
       const safePeriod = periodString.replace(/[^a-zA-Z0-9]/g, "_");
       const telegramMessage =
         `*Weekly Executive Sales Report Published*\n\n` +
