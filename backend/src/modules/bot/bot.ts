@@ -29,6 +29,7 @@ export function parseManagerChatIds(raw?: string): number[] {
 let registeredReportsService: ReportsService | null = null;
 let registeredLeadsService: LeadsService | null = null;
 let registeredDealsService: DealsService | null = null;
+let registeredInventoryService: any | null = null;
 
 export function setBotReportsService(service: ReportsService) {
   registeredReportsService = service;
@@ -40,6 +41,62 @@ export function setBotLeadsService(service: LeadsService) {
 
 export function setBotDealsService(service: DealsService) {
   registeredDealsService = service;
+}
+
+export function setBotInventoryService(service: any) {
+  registeredInventoryService = service;
+}
+
+export async function sendStockAdjustmentAlertToManagers(
+  bot: any,
+  managerChatIds: number[],
+  adjustment: any
+): Promise<number> {
+  if (!bot || !managerChatIds || managerChatIds.length === 0) return 0;
+
+  const deltaSign = adjustment.delta > 0 ? `+${adjustment.delta}` : `${adjustment.delta}`;
+  const priceFormatted =
+    adjustment.unitPrice > 0 ? `ETB ${Number(adjustment.unitPrice).toLocaleString()}` : "N/A";
+
+  const message =
+    `📦 *INVENTORY ADJUSTMENT REQUEST*\n` +
+    `*Status:* ⏳ Pending Manager Approval\n\n` +
+    `• *Item Code:* \`${adjustment.itemCode}\`\n` +
+    `• *Product Name:* ${adjustment.productName}\n` +
+    `• *Current Stock:* ${adjustment.currentStock} units\n` +
+    `• *Adjustment:* ${deltaSign} units\n` +
+    `• *Proposed New Stock:* ${adjustment.newStock} units\n` +
+    `• *Catalog Price:* ${priceFormatted}\n` +
+    `• *Requested by:* ${adjustment.requestedByName}\n` +
+    `• *Reason / Note:* ${adjustment.reason}\n\n` +
+    `_Please review the stock change details above:_`;
+
+  const keyboard = [
+    [
+      {
+        text: `✅ Approve (${deltaSign} Units)`,
+        callback_data: `stock_appr:${adjustment.requestId}`,
+      },
+      {
+        text: `❌ Reject`,
+        callback_data: `stock_rej:${adjustment.requestId}`,
+      },
+    ],
+  ];
+
+  let count = 0;
+  for (const chatId of managerChatIds) {
+    try {
+      await bot.api.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        reply_markup: { inline_keyboard: keyboard },
+      });
+      count++;
+    } catch (err: any) {
+      console.warn(`Could not dispatch stock alert to manager ${chatId}:`, err.message);
+    }
+  }
+  return count;
 }
 
 export const DEFAULT_BOT_COMMANDS = [
@@ -515,6 +572,77 @@ export function createBot(options: CreateBotOptions = {}) {
       await deliverProformaPdf(ctx, dealId, isManager, callerRep);
       return;
     }
+
+    if (data.startsWith("stock_appr:") || data.startsWith("stock_rej:")) {
+      const isApprove = data.startsWith("stock_appr:");
+      const requestId = data.split(":")[1]!;
+      const userId = ctx.from.id;
+
+      const isManager = salesRepsService?.isManager
+        ? await salesRepsService.isManager(userId, managerChatIds)
+        : managerChatIds.includes(userId);
+
+      if (!isManager) {
+        await ctx.answerCallbackQuery({
+          text: "⛔ Unauthorized: Only Executive Managers can approve inventory adjustments.",
+          show_alert: true,
+        }).catch(() => {});
+        return;
+      }
+
+      let managerName = "Executive Manager";
+      try {
+        const caller = await salesRepsService.findSalesRepByTelegramId(userId);
+        if (caller?.fullName) managerName = caller.fullName;
+      } catch {}
+
+      if (!registeredInventoryService) {
+        await ctx.answerCallbackQuery({ text: "Error: Inventory service unavailable." }).catch(() => {});
+        return;
+      }
+
+      const pending = registeredInventoryService.getPendingAdjustment(requestId);
+      if (!pending || pending.status !== "Pending") {
+        await ctx.answerCallbackQuery({ text: "Adjustment request already processed or expired." }).catch(() => {});
+        return;
+      }
+
+      const deltaSign = pending.delta > 0 ? `+${pending.delta}` : `${pending.delta}`;
+
+      if (isApprove) {
+        await registeredInventoryService.approveAdjustment(requestId, managerName);
+        await ctx.answerCallbackQuery({ text: "✅ Stock adjustment approved!" }).catch(() => {});
+        if (ctx.callbackQuery.message) {
+          await ctx.editMessageText(
+            `✅ *INVENTORY ADJUSTMENT APPROVED*\n\n` +
+            `• *Item Code:* \`${pending.itemCode}\`\n` +
+            `• *Product Name:* ${pending.productName}\n` +
+            `• *Updated Stock:* ${pending.newStock} units (${deltaSign} applied)\n` +
+            `• *Approved by:* Manager ${managerName}\n` +
+            `• *Originally Requested by:* ${pending.requestedByName}\n` +
+            `• *Reason:* ${pending.reason}`,
+            { parse_mode: "Markdown" }
+          ).catch(() => {});
+        }
+      } else {
+        await registeredInventoryService.rejectAdjustment(requestId, managerName);
+        await ctx.answerCallbackQuery({ text: "❌ Stock adjustment rejected." }).catch(() => {});
+        if (ctx.callbackQuery.message) {
+          await ctx.editMessageText(
+            `❌ *INVENTORY ADJUSTMENT REJECTED*\n\n` +
+            `• *Item Code:* \`${pending.itemCode}\`\n` +
+            `• *Product Name:* ${pending.productName}\n` +
+            `• *Stock Kept at:* ${pending.currentStock} units\n` +
+            `• *Rejected by:* Manager ${managerName}\n` +
+            `• *Originally Requested by:* ${pending.requestedByName}\n` +
+            `• *Reason:* ${pending.reason}`,
+            { parse_mode: "Markdown" }
+          ).catch(() => {});
+        }
+      }
+      return;
+    }
+
     await controller.handleCallbackQuery(ctx);
   });
 
