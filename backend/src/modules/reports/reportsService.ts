@@ -114,9 +114,9 @@ export class ReportsService {
     }
 
     // Process Deal Metrics
-    const wonDeals: Array<{ title: string; amount: number; product: string; rep: string }> = [];
-    const lostDeals: Array<{ title: string; reason: string; rep: string }> = [];
-    const pipelineDeals: Array<{ title: string; stage: string; amount: number | null; rep: string }> = [];
+    const wonDeals: Array<{ title: string; company: string; amount: number; product: string; rep: string }> = [];
+    const lostDeals: Array<{ title: string; company: string; reason: string; rep: string }> = [];
+    const pipelineDeals: Array<{ title: string; company: string; stage: string; amount: number | null; rep: string }> = [];
     let totalWonRevenue = 0;
 
     for (const page of deals) {
@@ -125,6 +125,10 @@ export class ReportsService {
         props?.["Deal Title"]?.title?.[0]?.plain_text ||
         props?.["Name"]?.title?.[0]?.plain_text ||
         "Untitled Contract";
+      const company =
+        props?.["Company Name"]?.rich_text?.[0]?.plain_text ||
+        props?.["Company"]?.rich_text?.[0]?.plain_text ||
+        title.replace(/ Order$/i, "");
       const stage = props?.["Stage"]?.select?.name || "Proposal";
       const amount = props?.["Offer VAT Incl"]?.number ?? props?.["Amount"]?.number ?? 0;
       const product = props?.["Product Type"]?.rich_text?.[0]?.plain_text || "Standard Industrial Supply";
@@ -132,12 +136,12 @@ export class ReportsService {
       const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text || "Commercial terms unfinalized";
 
       if (stage === "Won") {
-        wonDeals.push({ title, amount, product, rep });
+        wonDeals.push({ title, company, amount, product, rep });
         totalWonRevenue += amount;
       } else if (stage === "Lost") {
-        lostDeals.push({ title, reason: lostReason, rep });
+        lostDeals.push({ title, company, reason: lostReason, rep });
       } else {
-        pipelineDeals.push({ title, stage, amount: amount > 0 ? amount : null, rep });
+        pipelineDeals.push({ title, company, stage, amount: amount > 0 ? amount : null, rep });
       }
     }
 
@@ -146,34 +150,107 @@ export class ReportsService {
     const activePipelineCount = pipelineDeals.length;
     const newAccountsCount = accounts.length;
 
-    // Build Rep Performance Map
-    const repPerformanceMap = new Map<
-      string,
-      { wonCount: number; wonRevenue: number; pipelineCount: number; logsCount: number }
-    >();
+    // Build Rep Performance Map with detailed company attribution
+    interface RepPerformance {
+      wonCount: number;
+      wonRevenue: number;
+      pipelineCount: number;
+      lostCount: number;
+      logsCount: number;
+      wonDeals: { title: string; company: string; amount: number; product: string }[];
+      lostDeals: { title: string; company: string; reason: string }[];
+      pipelineDeals: { title: string; company: string; stage: string; amount: number | null }[];
+      consultedCompanies: string[];
+    }
+
+    const repPerformanceMap = new Map<string, RepPerformance>();
 
     for (const rep of reps) {
-      repPerformanceMap.set(rep.fullName, { wonCount: 0, wonRevenue: 0, pipelineCount: 0, logsCount: 0 });
+      repPerformanceMap.set(rep.fullName, {
+        wonCount: 0,
+        wonRevenue: 0,
+        pipelineCount: 0,
+        lostCount: 0,
+        logsCount: 0,
+        wonDeals: [],
+        lostDeals: [],
+        pipelineDeals: [],
+        consultedCompanies: [],
+      });
     }
 
     for (const w of wonDeals) {
-      const entry = repPerformanceMap.get(w.rep) || { wonCount: 0, wonRevenue: 0, pipelineCount: 0, logsCount: 0 };
+      let entry = repPerformanceMap.get(w.rep);
+      if (!entry) {
+        entry = {
+          wonCount: 0,
+          wonRevenue: 0,
+          pipelineCount: 0,
+          lostCount: 0,
+          logsCount: 0,
+          wonDeals: [],
+          lostDeals: [],
+          pipelineDeals: [],
+          consultedCompanies: [],
+        };
+        repPerformanceMap.set(w.rep, entry);
+      }
       entry.wonCount += 1;
       entry.wonRevenue += w.amount;
-      repPerformanceMap.set(w.rep, entry);
+      entry.wonDeals.push(w);
+    }
+
+    for (const l of lostDeals) {
+      let entry = repPerformanceMap.get(l.rep);
+      if (!entry) {
+        entry = {
+          wonCount: 0,
+          wonRevenue: 0,
+          pipelineCount: 0,
+          lostCount: 0,
+          logsCount: 0,
+          wonDeals: [],
+          lostDeals: [],
+          pipelineDeals: [],
+          consultedCompanies: [],
+        };
+        repPerformanceMap.set(l.rep, entry);
+      }
+      entry.lostCount += 1;
+      entry.lostDeals.push(l);
     }
 
     for (const p of pipelineDeals) {
-      const entry = repPerformanceMap.get(p.rep) || { wonCount: 0, wonRevenue: 0, pipelineCount: 0, logsCount: 0 };
+      let entry = repPerformanceMap.get(p.rep);
+      if (!entry) {
+        entry = {
+          wonCount: 0,
+          wonRevenue: 0,
+          pipelineCount: 0,
+          lostCount: 0,
+          logsCount: 0,
+          wonDeals: [],
+          lostDeals: [],
+          pipelineDeals: [],
+          consultedCompanies: [],
+        };
+        repPerformanceMap.set(p.rep, entry);
+      }
       entry.pipelineCount += 1;
-      repPerformanceMap.set(p.rep, entry);
+      entry.pipelineDeals.push(p);
     }
 
     for (const log of logs) {
       const repName = log.properties?.["Rep Name"]?.rich_text?.[0]?.plain_text;
+      const compName =
+        log.properties?.["Company Name"]?.rich_text?.[0]?.plain_text ||
+        log.properties?.["Log Title / ID"]?.title?.[0]?.plain_text;
       if (repName && repPerformanceMap.has(repName)) {
         const entry = repPerformanceMap.get(repName)!;
         entry.logsCount += 1;
+        if (compName && !entry.consultedCompanies.includes(compName)) {
+          entry.consultedCompanies.push(compName);
+        }
       }
     }
 
@@ -467,10 +544,128 @@ export class ReportsService {
           wonCount: 0,
           wonRevenue: 0,
           pipelineCount: 0,
+          lostCount: 0,
           logsCount: 0,
+          wonDeals: [],
+          lostDeals: [],
+          pipelineDeals: [],
+          consultedCompanies: [],
         };
 
-        pageBlocks.push({
+        const children: any[] = [];
+
+        // Detail Won Deals
+        for (const w of perf.wonDeals) {
+          children.push({
+            type: "bulleted_list_item",
+            bulleted_list_item: {
+              rich_text: [
+                {
+                  type: "text",
+                  text: { content: "Closed Won: " },
+                  annotations: { bold: true, color: "green" },
+                },
+                {
+                  type: "text",
+                  text: { content: `${w.title}` },
+                  annotations: { bold: true },
+                },
+                {
+                  type: "text",
+                  text: {
+                    content: ` — Contract: ETB ${w.amount.toLocaleString()} | Equipment: ${w.product}`,
+                  },
+                },
+              ],
+            },
+          });
+        }
+
+        // Detail Lost Deals
+        for (const l of perf.lostDeals) {
+          children.push({
+            type: "bulleted_list_item",
+            bulleted_list_item: {
+              rich_text: [
+                {
+                  type: "text",
+                  text: { content: "Lost Deal: " },
+                  annotations: { bold: true, color: "red" },
+                },
+                {
+                  type: "text",
+                  text: { content: `${l.title}` },
+                  annotations: { bold: true },
+                },
+                {
+                  type: "text",
+                  text: {
+                    content: ` — Documented Reason: "${l.reason}"`,
+                  },
+                },
+              ],
+            },
+          });
+        }
+
+        // Detail Active Pipeline Negotiations
+        for (const p of perf.pipelineDeals) {
+          children.push({
+            type: "bulleted_list_item",
+            bulleted_list_item: {
+              rich_text: [
+                {
+                  type: "text",
+                  text: { content: "Active Negotiation: " },
+                  annotations: { bold: true, color: "purple" },
+                },
+                {
+                  type: "text",
+                  text: { content: `${p.title}` },
+                  annotations: { bold: true },
+                },
+                {
+                  type: "text",
+                  text: {
+                    content: ` — Stage: ${p.stage}${
+                      p.amount ? ` | Estimated Value: ETB ${p.amount.toLocaleString()}` : ""
+                    }`,
+                  },
+                },
+              ],
+            },
+          });
+        }
+
+        // Detail Recorded Consultations
+        if (perf.logsCount > 0) {
+          const companiesSnippet =
+            perf.consultedCompanies.length > 0
+              ? ` (${perf.consultedCompanies.join(", ")})`
+              : "";
+          children.push({
+            type: "bulleted_list_item",
+            bulleted_list_item: {
+              rich_text: [
+                {
+                  type: "text",
+                  text: { content: "Client Consultations: " },
+                  annotations: { bold: true, color: "blue" },
+                },
+                {
+                  type: "text",
+                  text: {
+                    content: `${perf.logsCount} interaction${
+                      perf.logsCount === 1 ? "" : "s"
+                    } logged${companiesSnippet}`,
+                  },
+                },
+              ],
+            },
+          });
+        }
+
+        const repItem: any = {
           type: "bulleted_list_item",
           bulleted_list_item: {
             rich_text: [
@@ -482,12 +677,18 @@ export class ReportsService {
               {
                 type: "text",
                 text: {
-                  content: `Deals Won: ${perf.wonCount} (ETB ${perf.wonRevenue.toLocaleString()}) | Active Pipeline: ${perf.pipelineCount} deals | Recorded Consultations: ${perf.logsCount}`,
+                  content: `Deals Won: ${perf.wonCount} (ETB ${perf.wonRevenue.toLocaleString()}) | Deals Lost: ${perf.lostCount} | Active Pipeline: ${perf.pipelineCount} deals | Recorded Consultations: ${perf.logsCount}`,
                 },
               },
             ],
           },
-        });
+        };
+
+        if (children.length > 0) {
+          repItem.bulleted_list_item.children = children;
+        }
+
+        pageBlocks.push(repItem);
       }
     } else {
       pageBlocks.push({

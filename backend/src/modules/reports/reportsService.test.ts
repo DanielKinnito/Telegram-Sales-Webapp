@@ -141,6 +141,31 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
       expect(imageBlock.image.external.url).toContain("assets/company_logo.png");
     }
 
+    // Verify detailed rep performance matrix items
+    const firaolItem = createPageCall.children.find(
+      (c: any) =>
+        c.type === "bulleted_list_item" &&
+        c.bulleted_list_item?.rich_text?.[0]?.text?.content?.includes("Firaol Dagne")
+    );
+    expect(firaolItem).toBeDefined();
+    expect(firaolItem.bulleted_list_item.children).toHaveLength(3);
+    const firaolWonChild = firaolItem.bulleted_list_item.children[0];
+    expect(firaolWonChild.bulleted_list_item.rich_text[1].text.content).toContain(
+      "Awash Industrial Water Pump Order"
+    );
+
+    const olanaItem = createPageCall.children.find(
+      (c: any) =>
+        c.type === "bulleted_list_item" &&
+        c.bulleted_list_item?.rich_text?.[0]?.text?.content?.includes("Olana kebede")
+    );
+    expect(olanaItem).toBeDefined();
+    expect(olanaItem.bulleted_list_item.children).toHaveLength(1);
+    const olanaLostChild = olanaItem.bulleted_list_item.children[0];
+    expect(olanaLostChild.bulleted_list_item.rich_text[1].text.content).toContain(
+      "Bishoftu Farm Generator"
+    );
+
     // Verify Telegram alert dispatch to Manager
     expect(mockBot.api.sendMessage).toHaveBeenCalledWith(
       12345,
