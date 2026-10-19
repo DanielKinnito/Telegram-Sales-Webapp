@@ -15,18 +15,22 @@ async function setupBotProfile() {
 
   try {
     // 1. Set Short Description (Bio shown on bot profile)
-    await bot.api.setMyShortDescription("Internal B2B Sales Operations & CRM Portal");
+    await bot.api.setMyShortDescription(
+      "YC Electric B2B Sales Portal: Client registration, TIN conflict checks & proforma invoices."
+    );
     console.log("✅ Set Short Description");
 
     // 2. Set Full Description (Shown before pressing Start)
     await bot.api.setMyDescription(
-      "Welcome to the internal Sales CRM Portal!\n\n" +
-      "Use this bot to:\n" +
-      "• Register your sales team account\n" +
-      "• Check Ethiopian TIN numbers for client conflicts\n" +
-      "• Manage your active deals and pipelines\n" +
-      "• Submit bank payment confirmation links\n\n" +
-      "Tap 'Start' below to begin."
+      "YC Electric Equipment Manufacturing PLC (玉柴船电动力)\n" +
+      "Internal B2B Sales & CRM Operations Portal\n\n" +
+      "Features:\n" +
+      "• Client Onboarding & Front Desk Queue\n" +
+      "• Ethiopian TIN Registry Collision Checks (/ct <tin>)\n" +
+      "• Instant Proforma Invoice PDF Generation (/invoice)\n" +
+      "• Pipeline, Deal Tracking & Notion CRM Sync\n" +
+      "• Bank Payment Proof Submissions\n\n" +
+      "Tap 'Start' below to access your account or launch the app."
     );
     console.log("✅ Set Full Description");
 
@@ -36,9 +40,10 @@ async function setupBotProfile() {
       { command: "start", description: "Check access & launch CRM" },
       { command: "app", description: "Open Sales CRM Mini App" },
       { command: "ct", description: "Check Ethiopian TIN availability" },
+      { command: "invoice", description: "Generate Proforma Invoice PDF" },
       { command: "help", description: "Show usage commands" },
     ], { scope: { type: "default" } });
-    console.log("✅ Configured Default Bot Commands (/start, /app, /ct, /help) - hidden from non-managers");
+    console.log("✅ Configured Default Bot Commands (/start, /app, /ct, /invoice, /help)");
 
     // 4. Set Scoped Commands exclusively for Executive Managers
     const managerChatIds = (env.TELEGRAM_MANAGER_CHAT_IDS || "")
@@ -52,6 +57,7 @@ async function setupBotProfile() {
           { command: "start", description: "Check access & launch CRM" },
           { command: "app", description: "Open Sales CRM Mini App" },
           { command: "ct", description: "Check Ethiopian TIN availability" },
+          { command: "invoice", description: "Generate Proforma Invoice PDF" },
           { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
           { command: "help", description: "Show usage commands" },
         ], { scope: { type: "chat", chat_id: mgrId } });
