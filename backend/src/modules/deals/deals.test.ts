@@ -46,6 +46,7 @@ describe("Deals API Endpoints (/api/deals)", () => {
       submitPaymentProof: vi.fn(),
       getDeal: vi.fn(),
       getProformaInvoiceData: vi.fn(),
+      sendProformaInvoiceToTelegram: vi.fn(),
     };
 
     mockSalesRepsService = {
@@ -364,6 +365,47 @@ describe("Deals API Endpoints (/api/deals)", () => {
       expect(res.headers.get("content-disposition")).toContain("Proforma_Invoice_MK_Digital_PLC.pdf");
       const buffer = await res.arrayBuffer();
       expect(buffer.byteLength).toBeGreaterThan(100);
+    });
+  });
+
+  describe("POST /api/deals/:id/send-proforma-to-chat", () => {
+    it("rejects unauthenticated requests with 401", async () => {
+      const res = await fetch(`${baseUrl}/api/deals/deal_123/send-proforma-to-chat`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("sends PDF to rep's Telegram chat and returns 200", async () => {
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "998877",
+        fullName: "Rep Daniel",
+        role: "Sales Rep",
+        status: "Active",
+      });
+
+      (mockDealsService.getDeal as any).mockResolvedValue({
+        pageId: "deal_123",
+        title: "MK Digital PLC",
+        repName: "Rep Daniel",
+      });
+
+      (mockDealsService.sendProformaInvoiceToTelegram as any).mockResolvedValue({
+        success: true,
+        sentToChatId: 998877,
+      });
+
+      const res = await fetch(`${baseUrl}/api/deals/deal_123/send-proforma-to-chat`, {
+        method: "POST",
+        headers: { Authorization: repAuthHeader },
+      });
+
+      expect(res.status).toBe(200);
+      const data: any = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.message).toContain("sent to your Telegram chat");
+      expect(mockDealsService.sendProformaInvoiceToTelegram).toHaveBeenCalledWith("deal_123", 998877);
     });
   });
 });

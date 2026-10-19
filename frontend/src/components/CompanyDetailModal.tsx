@@ -287,14 +287,14 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       triggerHaptic('success');
       setNotification({
         type: 'success',
-        message: '📄 Official Proforma Invoice PDF downloaded!',
+        message: '📄 Proforma Invoice sent to your Telegram chat!',
       });
       setTimeout(() => setNotification(null), 5000);
     } catch (err: any) {
       triggerHaptic('error');
       setNotification({
         type: 'error',
-        message: `Failed to download PDF: ${err.message}`,
+        message: `Failed: ${err.message}`,
       });
       setTimeout(() => setNotification(null), 5000);
     } finally {

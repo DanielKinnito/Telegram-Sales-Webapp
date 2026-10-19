@@ -325,4 +325,37 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
       );
     });
   });
+
+  describe("searchDeals", () => {
+    it("matches deals by company name or deal title with natural multi-word query", async () => {
+      (mockNotionClient.queryDatabase as any).mockResolvedValue({
+        results: [
+          {
+            id: "deal_inova_1",
+            properties: {
+              "Deal Title": { title: [{ plain_text: "Inova PLC Order" }] },
+              Stage: { select: { name: "Proposal" } },
+              "Account Name": { rich_text: [{ plain_text: "Inova PLC" }] },
+              "Product Type": { rich_text: [{ plain_text: "Silent Diesel Generator" }] },
+            },
+          },
+          {
+            id: "deal_other_2",
+            properties: {
+              "Deal Title": { title: [{ plain_text: "Awash Agro" }] },
+              Stage: { select: { name: "Won" } },
+            },
+          },
+        ],
+      });
+
+      const matches = await service.searchDeals("inova plc order", { isManager: true });
+      expect(matches.length).toBe(1);
+      expect(matches[0]!.pageId).toBe("deal_inova_1");
+
+      const partialMatches = await service.searchDeals("inova", { isManager: true });
+      expect(partialMatches.length).toBe(1);
+      expect(partialMatches[0]!.pageId).toBe("deal_inova_1");
+    });
+  });
 });

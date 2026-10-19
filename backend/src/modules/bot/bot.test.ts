@@ -449,6 +449,13 @@ describe("GrammY Bot Module", () => {
           title: "MK Digital PLC",
           repName: "Rep Daniel",
         }),
+        searchDeals: vi.fn().mockResolvedValue([
+          {
+            pageId: "deal_777",
+            title: "MK Digital PLC",
+            repName: "Rep Daniel",
+          },
+        ]),
         getProformaInvoiceData: vi.fn().mockResolvedValue({
           dealId: "deal_777",
           refNo: "PI/0777/YC/25",

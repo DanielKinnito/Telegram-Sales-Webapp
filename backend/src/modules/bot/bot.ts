@@ -359,18 +359,72 @@ export function createBot(options: CreateBotOptions = {}) {
       }
     }
 
-    const text = ctx.message?.text?.trim() || "";
-    const parts = text.split(/\s+/);
-    const dealArg = parts[1]?.trim();
-
-    if (dealArg) {
-      await deliverProformaPdf(ctx, dealArg, isManager, callerRep);
-      return;
-    }
+    const rawText = ctx.message?.text?.trim() || "";
+    const query = rawText.replace(/^\/(?:invoice|proforma|pi)(?:@\w+)?/i, "").trim();
 
     const activeDealsService = await resolveDealsService();
     if (!activeDealsService) {
       await ctx.reply("Deals service is currently initializing. Please try again shortly.");
+      return;
+    }
+
+    if (query) {
+      const matches = await activeDealsService.searchDeals(query, {
+        isManager,
+        repPageId: callerRep?.pageId,
+        repFullName: callerRep?.fullName,
+      });
+
+      if (matches.length === 1) {
+        await deliverProformaPdf(ctx, matches[0]!.pageId, isManager, callerRep);
+        return;
+      }
+
+      if (matches.length > 1) {
+        const keyboard = matches.slice(0, 8).map((d) => [
+          {
+            text: `📄 ${d.companyName || d.title}`,
+            callback_data: `inv:${d.pageId}`,
+          },
+        ]);
+        await ctx.reply(
+          `Found ${matches.length} matching deals for "${query}". Tap one to receive the Proforma Invoice:`,
+          {
+            reply_markup: {
+              inline_keyboard: keyboard,
+            },
+          }
+        );
+        return;
+      }
+
+      // No match found -> show user's active deals as suggestions
+      let dealsList = isManager
+        ? await activeDealsService.listAllDeals()
+        : callerRep
+        ? await activeDealsService.listDealsForRep(callerRep.pageId, callerRep.fullName)
+        : [];
+
+      if (dealsList.length > 0) {
+        const keyboard = dealsList.slice(0, 5).map((d) => [
+          {
+            text: `📄 ${d.companyName || d.title}`,
+            callback_data: `inv:${d.pageId}`,
+          },
+        ]);
+        await ctx.reply(
+          `Could not find any deal matching "${query}".\n\nTap one of your registered deals below:`,
+          {
+            reply_markup: {
+              inline_keyboard: keyboard,
+            },
+          }
+        );
+      } else {
+        await ctx.reply(
+          `Could not find any deal matching "${query}". Please check the spelling or view your active deals in the app via /app.`
+        );
+      }
       return;
     }
 

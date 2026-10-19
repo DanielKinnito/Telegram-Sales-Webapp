@@ -244,31 +244,50 @@ export const api = {
     });
   },
 
-  // 5. Proforma Invoice PDF Download
-  downloadProformaInvoice: async (dealId: string, companyName?: string): Promise<void> => {
+  // 5. Proforma Invoice PDF Download & Telegram Dispatch
+  downloadProformaInvoice: async (dealId: string, companyName?: string): Promise<{ sentToTelegram: boolean }> => {
     const initData = getTelegramInitData();
-    const url = `${API_BASE}/api/deals/${dealId}/proforma-invoice`;
-    const response = await fetch(url, {
+
+    // 1. Deliver directly into the user's Telegram chat via bot
+    const chatRes = await fetch(`${API_BASE}/api/deals/${dealId}/send-proforma-to-chat`, {
+      method: 'POST',
       headers: {
         Authorization: `tma ${initData}`,
+        'Content-Type': 'application/json',
       },
     });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => null);
-      throw new Error(errData?.error || errData?.message || `Failed to download invoice (${response.status})`);
+    if (!chatRes.ok) {
+      const errData = await chatRes.json().catch(() => null);
+      throw new Error(errData?.error || errData?.message || `Failed to send invoice (${chatRes.status})`);
     }
 
-    const blob = await response.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    const safeName = (companyName || dealId).replace(/[^a-zA-Z0-9_-]/g, '_');
-    a.download = `Proforma_Invoice_${safeName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(blobUrl);
+    // 2. Also attempt local browser file download for desktop browser users
+    try {
+      const url = `${API_BASE}/api/deals/${dealId}/proforma-invoice`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `tma ${initData}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        const safeName = (companyName || dealId).replace(/[^a-zA-Z0-9_-]/g, '_');
+        a.download = `Proforma_Invoice_${safeName}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    } catch {
+      // Ignored if webview restricts blob downloads
+    }
+
+    return { sentToTelegram: true };
   },
 };
 

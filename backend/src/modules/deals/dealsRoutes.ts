@@ -294,5 +294,48 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
     }
   });
 
+  // 7. Send Proforma Invoice PDF directly to user's Telegram chat
+  router.post("/:id/send-proforma-to-chat", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Check caller authorization
+      let isManager = false;
+      let repFullName = "";
+      if (salesRepsService) {
+        const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
+        if (!caller || caller.status !== "Active") {
+          return res.status(403).json({ error: "Forbidden: Not an active staff member" });
+        }
+        isManager = caller.role === "Manager";
+        repFullName = caller.fullName || "";
+      }
+
+      const deal = await dealsService.getDeal(dealId);
+      // If not manager, sales rep can only access their own deal (or unassigned deal)
+      if (!isManager && repFullName && deal.repName) {
+        if (deal.repName.trim().toLowerCase() !== repFullName.trim().toLowerCase()) {
+          return res.status(403).json({ error: "Forbidden: You are not assigned to this deal" });
+        }
+      }
+
+      const result = await dealsService.sendProformaInvoiceToTelegram(dealId, telegramUser.id);
+      return res.status(200).json({
+        success: true,
+        message: "Proforma Invoice PDF sent to your Telegram chat!",
+        sentToChatId: result.sentToChatId,
+      });
+    } catch (err: any) {
+      if (err.message?.includes("Deal not found")) {
+        return res.status(404).json({ error: "Not Found", message: err.message });
+      }
+      return res.status(500).json({ error: "Failed to send Proforma Invoice to Telegram", details: err.message });
+    }
+  });
+
   return router;
 }

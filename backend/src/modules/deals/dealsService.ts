@@ -1,6 +1,7 @@
 import type { ResilientNotionClient } from "../notion/notionClient.js";
 import type { SalesRepsService } from "../notion/salesRepsService.js";
-import type { ProformaInvoiceData } from "../proforma/proformaPdfService.js";
+import { ProformaPdfService, type ProformaInvoiceData } from "../proforma/proformaPdfService.js";
+import { InputFile } from "grammy";
 import { env } from "../../config/env.js";
 
 export function formatTimeTo12Hour(timeStr: string): string {
@@ -380,6 +381,80 @@ export class DealsService {
       repName: deal.repName || "Sales Representative",
       repPhone,
     };
+  }
+
+  /**
+   * Searches for deals by customer company name, deal title, or TIN.
+   * Supports natural company name queries like "inova", "inova plc", "inova plc order".
+   */
+  public async searchDeals(
+    query: string,
+    caller?: { isManager: boolean; repPageId?: string; repFullName?: string }
+  ): Promise<DealRecord[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    // If query looks like a Notion page UUID (32 hex characters or 36 chars with hyphens)
+    const isUuid = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(trimmed);
+    if (isUuid) {
+      try {
+        const singleDeal = await this.getDeal(trimmed);
+        return [singleDeal];
+      } catch {}
+    }
+
+    // Otherwise, search across candidate deals
+    const allCandidateDeals = caller?.isManager
+      ? await this.listAllDeals()
+      : caller?.repPageId
+      ? await this.listDealsForRep(caller.repPageId, caller.repFullName)
+      : await this.listAllDeals();
+
+    const normalizedQuery = trimmed.toLowerCase();
+    const queryTokens = normalizedQuery.split(/[\s\-_]+/).filter((t) => t.length > 0);
+
+    return allCandidateDeals.filter((deal) => {
+      const title = (deal.title || "").toLowerCase();
+      const company = (deal.companyName || "").toLowerCase();
+      const tin = (deal.tin || "").toLowerCase();
+      const product = (deal.productType || "").toLowerCase();
+      const combined = `${title} ${company} ${tin} ${product}`;
+
+      if (combined.includes(normalizedQuery)) return true;
+      return queryTokens.every((token) => combined.includes(token));
+    });
+  }
+
+  /**
+   * Generates a branded corporate Proforma Invoice PDF and dispatches it directly
+   * into the user's private Telegram chat via the bot.
+   */
+  public async sendProformaInvoiceToTelegram(
+    dealId: string,
+    telegramChatId: number | string
+  ): Promise<{ success: boolean; sentToChatId: string | number }> {
+    const proformaData = await this.getProformaInvoiceData(dealId);
+    const pdfBuffer = await ProformaPdfService.generateProformaPdf(proformaData);
+    const safeName = (proformaData.customerName || dealId).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    if (this.bot?.api?.sendDocument) {
+      await this.bot.api.sendDocument(
+        telegramChatId,
+        new InputFile(pdfBuffer, `Proforma_Invoice_${safeName}.pdf`),
+        {
+          caption:
+            `📄 *YC Electric Equipment Manufacturing PLC*\n` +
+            `*PROFORMA INVOICE*\n\n` +
+            `• *Customer:* ${proformaData.customerName}\n` +
+            `• *Ref No:* ${proformaData.refNo}\n` +
+            `• *Total Price (incl. 15% VAT):* ETB ${proformaData.totalAmountVatIncl.toLocaleString()}\n` +
+            `• *Representative:* ${proformaData.repName} (${proformaData.repPhone})`,
+          parse_mode: "Markdown",
+        }
+      );
+    }
+
+    return { success: true, sentToChatId: telegramChatId };
   }
 
   /**

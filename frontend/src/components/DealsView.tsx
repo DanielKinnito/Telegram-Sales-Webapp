@@ -116,11 +116,11 @@ export const DealsView: React.FC = () => {
     try {
       await api.downloadProformaInvoice(deal.pageId, deal.companyName || deal.title);
       triggerHaptic('success');
-      setSuccessToast(`📄 Proforma Invoice downloaded for "${deal.companyName || deal.title}".`);
+      setSuccessToast(`📄 Proforma Invoice sent to your Telegram chat!`);
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
       triggerHaptic('error');
-      setSuccessToast(`Download failed: ${err.message}`);
+      setSuccessToast(`Failed: ${err.message}`);
       setTimeout(() => setSuccessToast(null), 5000);
     } finally {
       setDownloadingDealId(null);
