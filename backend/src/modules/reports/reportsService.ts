@@ -177,8 +177,25 @@ export class ReportsService {
       }
     }
 
+    const logoUrl = env.WEBAPP_URL ? `${env.WEBAPP_URL.replace(/\/$/, "")}/assets/company_logo.png` : undefined;
+
     // 5. Construct Formal Professional Notion Document Blocks (NO emojis, NO AI fluff)
     const pageBlocks: any[] = [
+      // Optional Corporate Brand Logo Header Block
+      ...(logoUrl
+        ? [
+            {
+              type: "image",
+              image: {
+                type: "external",
+                external: {
+                  url: logoUrl,
+                },
+              },
+            },
+          ]
+        : []),
+
       // Formal Institutional Corporate Letterhead Header
       {
         type: "paragraph",
@@ -586,7 +603,7 @@ export class ReportsService {
     );
 
     // 6. Create the Report Page in the Executive Reports Database
-    const newPage: any = await this.notionClient.createPage({
+    const pageParams: any = {
       parent: { database_id: this.reportsDbId },
       properties: {
         "Report Title": {
@@ -618,7 +635,18 @@ export class ReportsService {
         },
       },
       children: pageBlocks,
-    });
+    };
+
+    if (logoUrl) {
+      pageParams.icon = {
+        type: "external",
+        external: {
+          url: logoUrl,
+        },
+      };
+    }
+
+    const newPage: any = await this.notionClient.createPage(pageParams);
 
     const reportPageId = newPage.id;
     const reportUrl = `https://www.notion.so/${reportPageId.replace(/-/g, "")}`;

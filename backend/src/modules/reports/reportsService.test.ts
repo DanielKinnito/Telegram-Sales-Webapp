@@ -126,12 +126,20 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
     );
 
     const createPageCall = (mockNotionClient.createPage as any).mock.calls[0][0];
-    expect(createPageCall.children[0].paragraph.rich_text[0].text.content).toContain(
+    const headerParagraph = createPageCall.children.find((c: any) => c.type === "paragraph");
+    expect(headerParagraph).toBeDefined();
+    expect(headerParagraph.paragraph.rich_text[0].text.content).toContain(
       "YC ELECTRIC EQUIPMENT MANUFACTURING PLC"
     );
-    expect(createPageCall.children[0].paragraph.rich_text[1].text.content).toContain(
+    expect(headerParagraph.paragraph.rich_text[1].text.content).toContain(
       "Nifasselk Lafto, Addis Ababa, Ethiopia"
     );
+
+    // Verify brand logo image block
+    const imageBlock = createPageCall.children.find((c: any) => c.type === "image");
+    if (imageBlock) {
+      expect(imageBlock.image.external.url).toContain("assets/company_logo.png");
+    }
 
     // Verify Telegram alert dispatch to Manager
     expect(mockBot.api.sendMessage).toHaveBeenCalledWith(

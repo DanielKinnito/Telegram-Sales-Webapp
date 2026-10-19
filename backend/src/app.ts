@@ -112,11 +112,25 @@ export function createApp(options: AppOptions = {}) {
   app.use("/api/queue", createQueueRouter({ queueService, salesRepsService }));
   app.use("/api/deals", createDealsRouter({ dealsService, salesRepsService }));
 
+  // Static assets (logos, corporate branding, icons)
+  const assetsPaths = [
+    path.resolve(__dirname, "../assets"),
+    path.resolve(__dirname, "assets"),
+    path.resolve(process.cwd(), "assets"),
+    path.resolve(process.cwd(), "backend/assets"),
+  ];
+  for (const assetDir of assetsPaths) {
+    if (fs.existsSync(assetDir)) {
+      app.use("/assets", express.static(assetDir));
+      break;
+    }
+  }
+
   // Static files for Telegram Mini App frontend when built
   const frontendDist = path.resolve(__dirname, "../../frontend/dist");
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
-    app.get(/^(?!\/(api|health)).*$/, (_req, res) => {
+    app.get(/^(?!\/(api|health|assets)).*$/, (_req, res) => {
       res.sendFile(path.join(frontendDist, "index.html"));
     });
   }

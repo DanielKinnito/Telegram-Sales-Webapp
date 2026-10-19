@@ -1,4 +1,10 @@
 import PDFDocument from "pdfkit";
+import * as path from "path";
+import * as fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface ProformaInvoiceData {
   dealId: string;
@@ -55,14 +61,34 @@ export class ProformaPdfService {
         const leftMargin = 36;
         const contentWidth = 523; // A4 width 595 - 72
 
-        // Top Corporate Logo Badge (Vector Red Badge)
-        doc.save();
-        doc.rect(leftMargin, 36, 110, 36).fillAndStroke("#cf1515", "#b01010");
-        doc.fillColor("#ffffff").fontSize(10).font("Helvetica-Bold");
-        doc.text("YUCHAI POWER", leftMargin + 8, 43, { width: 94, align: "center" });
-        doc.fontSize(6).font("Helvetica");
-        doc.text("MARINE & GENSET POWER", leftMargin + 5, 57, { width: 100, align: "center" });
-        doc.restore();
+        // Top Corporate Logo (Official Yuchai Marine & Genset Power Logo)
+        const logoCandidates = [
+          path.resolve(__dirname, "../../assets/company_logo.png"),
+          path.resolve(__dirname, "../../../assets/company_logo.png"),
+          path.resolve(process.cwd(), "assets/company_logo.png"),
+          path.resolve(process.cwd(), "backend/assets/company_logo.png"),
+          path.resolve(process.cwd(), "backend/src/assets/company_logo.png"),
+        ];
+        let logoPath: string | null = null;
+        for (const candidate of logoCandidates) {
+          if (fs.existsSync(candidate)) {
+            logoPath = candidate;
+            break;
+          }
+        }
+
+        if (logoPath) {
+          doc.image(logoPath, leftMargin, 36, { width: 115 });
+        } else {
+          // Fallback to vector badge if asset is missing
+          doc.save();
+          doc.rect(leftMargin, 36, 110, 36).fillAndStroke("#cf1515", "#b01010");
+          doc.fillColor("#ffffff").fontSize(10).font("Helvetica-Bold");
+          doc.text("YUCHAI POWER", leftMargin + 8, 43, { width: 94, align: "center" });
+          doc.fontSize(6).font("Helvetica");
+          doc.text("MARINE & GENSET POWER", leftMargin + 5, 57, { width: 100, align: "center" });
+          doc.restore();
+        }
 
         // Company Details next to Badge
         doc.fillColor("#111827").fontSize(13).font("Helvetica-Bold");

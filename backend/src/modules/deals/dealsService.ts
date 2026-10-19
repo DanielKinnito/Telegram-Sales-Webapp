@@ -1046,14 +1046,14 @@ export class DealsService {
         const pageCompanyName = props?.["Company Name"]?.rich_text?.[0]?.plain_text;
         const title = props?.["Log Title / ID"]?.title?.[0]?.plain_text || "";
 
-        // Filter by companyName if supplied
-        if (
-          companyName &&
-          pageCompanyName &&
-          !pageCompanyName.toLowerCase().includes(companyName.toLowerCase()) &&
-          !title.toLowerCase().includes(companyName.toLowerCase())
-        ) {
-          continue;
+        // Filter by companyName if supplied: require match on either Company Name or Title
+        if (companyName) {
+          const target = companyName.toLowerCase();
+          const matchCompany = pageCompanyName ? pageCompanyName.toLowerCase().includes(target) : false;
+          const matchTitle = title ? title.toLowerCase().includes(target) : false;
+          if (!matchCompany && !matchTitle) {
+            continue;
+          }
         }
 
         const type = (props?.["Interaction Type"]?.select?.name as any) || "Note";
