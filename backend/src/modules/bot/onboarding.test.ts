@@ -228,11 +228,19 @@ describe("Telegram Bot Rep Onboarding Workflow", () => {
   });
 
   describe("Manager approval callbacks", () => {
-    it("handles Manager approval: updates Notion and notifies applicant", async () => {
+    it("handles Manager approval using Notion DB name and does not leak Telegram first_name", async () => {
       (mockSalesRepsService.updateSalesRepStatus as any).mockResolvedValue(undefined);
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "mgr_page_1",
+        telegramId: "999001",
+        fullName: "Daniel Mekonnen",
+        phone: "+251911000000",
+        role: "Manager",
+        status: "Active",
+      });
 
       const { ctx, editedMessages } = createMockContext({
-        userId: 999001, // Manager
+        userId: 999001, // Manager whose Telegram first_name is 'TestUser'
         callbackData: "mgr_approve:page_new_555:555",
       });
 
@@ -243,7 +251,8 @@ describe("Telegram Bot Rep Onboarding Workflow", () => {
         "Active"
       );
       expect(editedMessages.length).toBe(1);
-      expect(editedMessages[0]?.text).toMatch(/Approved/i);
+      expect(editedMessages[0]?.text).toBe("✅ Approved by Manager (Daniel Mekonnen)\nStatus: 🟢 Active");
+      expect(editedMessages[0]?.text).not.toContain("TestUser");
 
       // Applicant alerted
       expect(ctx.api.sendMessage).toHaveBeenCalledWith(
@@ -252,11 +261,35 @@ describe("Telegram Bot Rep Onboarding Workflow", () => {
       );
     });
 
-    it("handles Manager rejection: updates Notion and notifies applicant", async () => {
+    it("handles Manager approval when manager is not in Notion without leaking Telegram username/first_name", async () => {
       (mockSalesRepsService.updateSalesRepStatus as any).mockResolvedValue(undefined);
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue(null);
 
       const { ctx, editedMessages } = createMockContext({
-        userId: 999001, // Manager
+        userId: 999001,
+        callbackData: "mgr_approve:page_new_555:555",
+      });
+
+      await controller.handleCallbackQuery(ctx);
+
+      expect(editedMessages.length).toBe(1);
+      expect(editedMessages[0]?.text).toBe("✅ Approved by Manager\nStatus: 🟢 Active");
+      expect(editedMessages[0]?.text).not.toContain("TestUser");
+    });
+
+    it("handles Manager rejection using Notion DB name and does not leak Telegram first_name", async () => {
+      (mockSalesRepsService.updateSalesRepStatus as any).mockResolvedValue(undefined);
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "mgr_page_1",
+        telegramId: "999001",
+        fullName: "Daniel Mekonnen",
+        phone: "+251911000000",
+        role: "Manager",
+        status: "Active",
+      });
+
+      const { ctx, editedMessages } = createMockContext({
+        userId: 999001, // Manager whose Telegram first_name is 'TestUser'
         callbackData: "mgr_reject:page_new_555:555",
       });
 
@@ -267,7 +300,8 @@ describe("Telegram Bot Rep Onboarding Workflow", () => {
         "Inactive"
       );
       expect(editedMessages.length).toBe(1);
-      expect(editedMessages[0]?.text).toMatch(/Rejected/i);
+      expect(editedMessages[0]?.text).toBe("❌ Rejected by Manager (Daniel Mekonnen)\nStatus: 🔴 Inactive");
+      expect(editedMessages[0]?.text).not.toContain("TestUser");
 
       // Applicant alerted
       expect(ctx.api.sendMessage).toHaveBeenCalledWith(

@@ -227,8 +227,11 @@ export class OnboardingController {
 
       await this.salesRepsService.updateSalesRepStatus(pageId, "Active");
 
+      const managerName = await this.getManagerDisplayName(userId);
+      const managerSuffix = managerName !== "Manager" ? ` (${managerName})` : "";
+
       await ctx.editMessageText(
-        `✅ Approved by Manager (${ctx.from?.first_name || "Manager"})\nStatus: 🟢 Active`
+        `✅ Approved by Manager${managerSuffix}\nStatus: 🟢 Active`
       );
 
       // Notify the applicant
@@ -265,8 +268,11 @@ export class OnboardingController {
 
       await this.salesRepsService.updateSalesRepStatus(pageId, "Inactive");
 
+      const managerName = await this.getManagerDisplayName(userId);
+      const managerSuffix = managerName !== "Manager" ? ` (${managerName})` : "";
+
       await ctx.editMessageText(
-        `❌ Rejected by Manager (${ctx.from?.first_name || "Manager"})\nStatus: 🔴 Inactive`
+        `❌ Rejected by Manager${managerSuffix}\nStatus: 🔴 Inactive`
       );
 
       // Notify applicant
@@ -280,6 +286,28 @@ export class OnboardingController {
       }
       return;
     }
+  }
+
+  /**
+   * Resolves the manager's corporate display name from the Notion database (or signup registration),
+   * strictly preventing personal Telegram username/nickname disclosure for privacy.
+   */
+  private async getManagerDisplayName(userId: number | undefined): Promise<string> {
+    if (!userId || !this.salesRepsService?.findSalesRepByTelegramId) {
+      return "Manager";
+    }
+
+    try {
+      const managerRecord = await this.salesRepsService.findSalesRepByTelegramId(userId);
+      const name = managerRecord?.fullName?.trim();
+      if (name && name.toLowerCase() !== "manager") {
+        return name;
+      }
+    } catch {
+      // In case Notion is unreachable, fail closed without exposing Telegram profile info
+    }
+
+    return "Manager";
   }
 
   /**
