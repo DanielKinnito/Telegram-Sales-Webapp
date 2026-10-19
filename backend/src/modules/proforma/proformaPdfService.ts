@@ -6,6 +6,17 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface ProformaLineItem {
+  itemNo?: number;
+  itemCode?: string;
+  productName: string;
+  productDescription?: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  totalPrice?: number;
+}
+
 export interface ProformaInvoiceData {
   dealId: string;
   refNo: string;
@@ -19,6 +30,7 @@ export interface ProformaInvoiceData {
   totalAmountVatIncl: number;
   repName: string;
   repPhone: string;
+  items?: ProformaLineItem[] | undefined;
 }
 
 export class ProformaPdfService {
@@ -171,59 +183,127 @@ export class ProformaPdfService {
         doc.text("Unit price", colX.unitPrice, tableTop + 5, { width: colW.unitPrice, align: "center" });
         doc.text("Total price", colX.totalPrice, tableTop + 5, { width: colW.totalPrice, align: "center" });
 
-        // Row 1: Product Row
-        const row1Top = tableTop + headerHeight;
-        const row1Height = 135;
+        let curY = tableTop + headerHeight;
 
-        doc.rect(leftMargin, row1Top, contentWidth, row1Height).stroke("#000000");
-        // Column vertical dividers for row 1
-        Object.values(colX).slice(1).forEach((x) => {
-          doc.moveTo(x, row1Top).lineTo(x, row1Top + row1Height).stroke("#000000");
-        });
+        if (data.items && data.items.length > 0) {
+          // Dynamic multi-item rendering
+          data.items.forEach((item, idx) => {
+            const itNo = item.itemNo || idx + 1;
+            const code = item.itemCode || "";
+            const title = item.productName;
+            const specs = item.productDescription || "";
+            const qty = item.quantity || 1;
+            const unit = item.unit || "unit";
+            const itemUnitPrice = item.unitPrice || 0;
+            const itemTotalPrice = item.totalPrice != null ? item.totalPrice : itemUnitPrice * qty;
 
-        // Content Row 1
-        doc.font("Helvetica").fontSize(8.5);
-        doc.text("1.", colX.itNo, row1Top + 8, { width: colW.itNo, align: "center" });
-        doc.text("", colX.itemCode, row1Top + 8, { width: colW.itemCode, align: "center" });
+            // Measure description height
+            doc.font("Helvetica-Bold").fontSize(8.5);
+            const titleH = doc.heightOfString(title, { width: colW.desc - 12 });
+            let specsH = 0;
+            if (specs) {
+              doc.font("Helvetica").fontSize(7.5);
+              specsH = doc.heightOfString(specs, { width: colW.desc - 12, lineGap: 1 });
+            }
+            const rowHeight = Math.max(22, titleH + specsH + 12);
 
-        // Product description formatted lines
-        doc.font("Helvetica-Bold").fontSize(8.5);
-        doc.text(data.productDescription || "SILENT DIESEL GENERATOR SET", colX.desc + 6, row1Top + 8, {
-          width: colW.desc - 12,
-          lineGap: 2,
-        });
+            // Row box & dividers
+            doc.rect(leftMargin, curY, contentWidth, rowHeight).stroke("#000000");
+            Object.values(colX).slice(1).forEach((x) => {
+              doc.moveTo(x, curY).lineTo(x, curY + rowHeight).stroke("#000000");
+            });
 
-        // Qty
-        doc.font("Helvetica").fontSize(8.5);
-        doc.text(`${data.quantity || 1} ${data.unit || "unit"}`, colX.qty, row1Top + 8, {
-          width: colW.qty,
-          align: "center",
-        });
+            // Col 1: It. No.
+            doc.font("Helvetica").fontSize(8.5).fillColor("#000000");
+            doc.text(`${itNo}.`, colX.itNo, curY + 6, { width: colW.itNo, align: "center" });
 
-        // Unit Price & Total Price (Before VAT)
-        doc.text(formatCurrency(unitPrice), colX.unitPrice, row1Top + 8, {
-          width: colW.unitPrice - 6,
-          align: "right",
-        });
-        doc.text(formatCurrency(totalBeforeVat), colX.totalPrice, row1Top + 8, {
-          width: colW.totalPrice - 6,
-          align: "right",
-        });
+            // Col 2: Item Code
+            doc.text(code, colX.itemCode, curY + 6, { width: colW.itemCode, align: "center" });
 
-        // Row 2: ATS Row (Optional accessory row matching template)
-        const row2Top = row1Top + row1Height;
-        const row2Height = 18;
-        doc.rect(leftMargin, row2Top, contentWidth, row2Height).stroke("#000000");
-        Object.values(colX).slice(1).forEach((x) => {
-          doc.moveTo(x, row2Top).lineTo(x, row2Top + row2Height).stroke("#000000");
-        });
-        doc.font("Helvetica").fontSize(8.5);
-        doc.text("2", colX.itNo, row2Top + 4, { width: colW.itNo, align: "center" });
-        doc.font("Helvetica-BoldOblique");
-        doc.text("ATS (Automatic Transfer Switch)", colX.desc + 6, row2Top + 4, { width: colW.desc - 12 });
+            // Col 3: Description (Bold Title + multiline specs)
+            let descY = curY + 6;
+            doc.font("Helvetica-Bold").fontSize(8.5);
+            doc.text(title, colX.desc + 6, descY, { width: colW.desc - 12 });
+            descY += titleH + 2;
+
+            if (specs) {
+              doc.font("Helvetica").fontSize(7.5);
+              doc.text(specs, colX.desc + 6, descY, { width: colW.desc - 12, lineGap: 1 });
+            }
+
+            // Col 4: Qty
+            doc.font("Helvetica").fontSize(8.5);
+            doc.text(`${qty} ${unit}`, colX.qty, curY + 6, { width: colW.qty, align: "center" });
+
+            // Col 5: Unit Price
+            doc.text(formatCurrency(itemUnitPrice), colX.unitPrice, curY + 6, {
+              width: colW.unitPrice - 6,
+              align: "right",
+            });
+
+            // Col 6: Total Price
+            doc.text(formatCurrency(itemTotalPrice), colX.totalPrice, curY + 6, {
+              width: colW.totalPrice - 6,
+              align: "right",
+            });
+
+            curY += rowHeight;
+          });
+        } else {
+          // Backward-compatible single item legacy rendering
+          const row1Height = 135;
+          doc.rect(leftMargin, curY, contentWidth, row1Height).stroke("#000000");
+          Object.values(colX).slice(1).forEach((x) => {
+            doc.moveTo(x, curY).lineTo(x, curY + row1Height).stroke("#000000");
+          });
+
+          // Content Row 1
+          doc.font("Helvetica").fontSize(8.5).fillColor("#000000");
+          doc.text("1.", colX.itNo, curY + 8, { width: colW.itNo, align: "center" });
+          doc.text("", colX.itemCode, curY + 8, { width: colW.itemCode, align: "center" });
+
+          // Product description formatted lines
+          doc.font("Helvetica-Bold").fontSize(8.5);
+          doc.text(data.productDescription || "SILENT DIESEL GENERATOR SET", colX.desc + 6, curY + 8, {
+            width: colW.desc - 12,
+            lineGap: 2,
+          });
+
+          // Qty
+          doc.font("Helvetica").fontSize(8.5);
+          doc.text(`${data.quantity || 1} ${data.unit || "unit"}`, colX.qty, curY + 8, {
+            width: colW.qty,
+            align: "center",
+          });
+
+          // Unit Price & Total Price (Before VAT)
+          doc.text(formatCurrency(unitPrice), colX.unitPrice, curY + 8, {
+            width: colW.unitPrice - 6,
+            align: "right",
+          });
+          doc.text(formatCurrency(totalBeforeVat), colX.totalPrice, curY + 8, {
+            width: colW.totalPrice - 6,
+            align: "right",
+          });
+
+          curY += row1Height;
+
+          // Row 2: ATS Row
+          const row2Height = 18;
+          doc.rect(leftMargin, curY, contentWidth, row2Height).stroke("#000000");
+          Object.values(colX).slice(1).forEach((x) => {
+            doc.moveTo(x, curY).lineTo(x, curY + row2Height).stroke("#000000");
+          });
+          doc.font("Helvetica").fontSize(8.5);
+          doc.text("2", colX.itNo, curY + 4, { width: colW.itNo, align: "center" });
+          doc.font("Helvetica-BoldOblique");
+          doc.text("ATS (Automatic Transfer Switch)", colX.desc + 6, curY + 4, { width: colW.desc - 12 });
+
+          curY += row2Height;
+        }
 
         // 5. Totals Block (Right Aligned under Table)
-        const totalBoxTop = row2Top + row2Height;
+        const totalBoxTop = curY;
         const totalsHeight = 16;
         const summaryLabelWidth = colW.itNo + colW.itemCode + colW.desc + colW.qty + colW.unitPrice;
 
