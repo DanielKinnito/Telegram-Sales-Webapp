@@ -179,20 +179,25 @@ export class ReportsService {
 
     // 5. Construct Formal Professional Notion Document Blocks (NO emojis, NO AI fluff)
     const pageBlocks: any[] = [
-      // Formal Institutional Header
+      // Formal Institutional Corporate Letterhead Header
       {
         type: "paragraph",
         paragraph: {
           rich_text: [
             {
               type: "text",
-              text: { content: "COMMERCIAL OPERATIONS DIVISION\n" },
-              annotations: { bold: true, color: "gray" },
+              text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC (玉柴船电动力)\n" },
+              annotations: { bold: true },
             },
             {
               type: "text",
-              text: { content: "WEEKLY SALES PERFORMANCE REPORT\n" },
-              annotations: { bold: true },
+              text: { content: "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com | Tel: +251900640028 / +251929296636\n" },
+              annotations: { bold: false, color: "gray" },
+            },
+            {
+              type: "text",
+              text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES PERFORMANCE REPORT\n" },
+              annotations: { bold: true, color: "blue" },
             },
             {
               type: "text",
@@ -213,6 +218,8 @@ export class ReportsService {
               type: "text",
               text: {
                 content:
+                  `Corporate Entity: YC Electric Equipment Manufacturing PLC\n` +
+                  `Headquarters: Nifasselk Lafto, Addis Ababa, Ethiopia\n` +
                   `Reporting Period: ${periodString}\n` +
                   `Publication Date: ${formatDateFormal(periodEnd)}\n` +
                   `Prepared For: Commercial Executive Committee\n` +

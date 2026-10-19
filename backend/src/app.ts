@@ -16,7 +16,7 @@ import { createDealsRouter } from "./modules/deals/dealsRoutes.js";
 import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
 import { getTinCache } from "./modules/leads/tinCache.js";
-import { getBot, parseManagerChatIds } from "./modules/bot/bot.js";
+import { getBot, parseManagerChatIds, setBotDealsService } from "./modules/bot/bot.js";
 import type { StorageProvider } from "./services/storage/types.js";
 import { getStorageProvider } from "./services/storage/index.js";
 import { env } from "./config/env.js";
@@ -105,6 +105,8 @@ export function createApp(options: AppOptions = {}) {
       managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
       bot: getBot(),
     });
+
+  setBotDealsService(dealsService);
 
   app.use("/api/leads", createLeadsRouter(leadsService));
   app.use("/api/queue", createQueueRouter({ queueService, salesRepsService }));

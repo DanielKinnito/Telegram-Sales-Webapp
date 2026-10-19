@@ -243,6 +243,33 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // 5. Proforma Invoice PDF Download
+  downloadProformaInvoice: async (dealId: string, companyName?: string): Promise<void> => {
+    const initData = getTelegramInitData();
+    const url = `${API_BASE}/api/deals/${dealId}/proforma-invoice`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `tma ${initData}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => null);
+      throw new Error(errData?.error || errData?.message || `Failed to download invoice (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    const safeName = (companyName || dealId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    a.download = `Proforma_Invoice_${safeName}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  },
 };
 
 export interface AuthMeResponse {

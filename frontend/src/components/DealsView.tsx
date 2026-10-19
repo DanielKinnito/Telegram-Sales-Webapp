@@ -13,6 +13,7 @@ import {
   XCircle,
   Clock,
   Zap,
+  FileText,
 } from 'lucide-react';
 import { api, type DealItem } from '../lib/api';
 import { PaymentProofModal } from './PaymentProofModal';
@@ -27,6 +28,7 @@ export const DealsView: React.FC = () => {
   const [selectedDealForDetail, setSelectedDealForDetail] = useState<DealItem | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [completingDealId, setCompletingDealId] = useState<string | null>(null);
+  const [downloadingDealId, setDownloadingDealId] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
@@ -104,6 +106,24 @@ export const DealsView: React.FC = () => {
       setTimeout(() => setSuccessToast(null), 5000);
     } finally {
       setCompletingDealId(null);
+    }
+  };
+
+  const handleDownloadInvoice = async (deal: DealItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDownloadingDealId(deal.pageId);
+    triggerHaptic('medium');
+    try {
+      await api.downloadProformaInvoice(deal.pageId, deal.companyName || deal.title);
+      triggerHaptic('success');
+      setSuccessToast(`📄 Proforma Invoice downloaded for "${deal.companyName || deal.title}".`);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err: any) {
+      triggerHaptic('error');
+      setSuccessToast(`Download failed: ${err.message}`);
+      setTimeout(() => setSuccessToast(null), 5000);
+    } finally {
+      setDownloadingDealId(null);
     }
   };
 
@@ -378,10 +398,26 @@ export const DealsView: React.FC = () => {
 
                 {/* Bottom Card Controls: Deal Completed Button */}
                 <div className="pt-1 flex items-center justify-between">
-                  <span className="text-[11px] text-[#0071e3] font-medium flex items-center space-x-1">
-                    <Calendar className="w-3 h-3" />
-                    <span>Notes & Details</span>
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] text-[#0071e3] font-medium flex items-center space-x-1">
+                      <Calendar className="w-3 h-3" />
+                      <span>Notes & Details</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDownloadInvoice(deal, e)}
+                      disabled={downloadingDealId === deal.pageId}
+                      className="text-[11px] text-[#6e6e73] dark:text-[#a1a1a6] hover:text-[#0071e3] font-medium flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-black/5 dark:bg-white/10 apple-press disabled:opacity-50"
+                      title="Download Proforma Invoice PDF"
+                    >
+                      {downloadingDealId === deal.pageId ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-[#0071e3]" />
+                      ) : (
+                        <FileText className="w-3 h-3 text-[#0071e3]" />
+                      )}
+                      <span>Proforma PDF</span>
+                    </button>
+                  </div>
 
                   {isWon ? (
                     <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30">

@@ -430,4 +430,153 @@ describe("GrammY Bot Module", () => {
       expect(sentMessages[0]).toContain("/ct 0012345678");
     });
   });
+
+  describe("/invoice & /proforma command", () => {
+    it("handles /invoice <deal_id> by generating and sending PDF document", async () => {
+      const mockNotionClient: Partial<ResilientNotionClient> = {};
+      const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+      vi.spyOn(salesRepsService, "findSalesRepByTelegramId").mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "888001",
+        fullName: "Rep Daniel",
+        role: "Sales Rep",
+        status: "Active",
+      } as any);
+
+      const mockDealsService = {
+        getDeal: vi.fn().mockResolvedValue({
+          pageId: "deal_777",
+          title: "MK Digital PLC",
+          repName: "Rep Daniel",
+        }),
+        getProformaInvoiceData: vi.fn().mockResolvedValue({
+          dealId: "deal_777",
+          refNo: "PI/0777/YC/25",
+          date: "Oct/19/2026",
+          customerName: "MK Digital PLC",
+          productDescription: "SILENT DIESEL GENERATOR SET YC345GF",
+          totalAmountVatIncl: 5200000,
+          repName: "Rep Daniel",
+          repPhone: "0911223344",
+        }),
+      };
+
+      const bot = createBot({
+        token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+        salesRepsService,
+        dealsService: mockDealsService as any,
+        managerChatIds: [999001],
+      });
+
+      bot.botInfo = {
+        id: 123456789,
+        is_bot: true,
+        first_name: "TestBot",
+        username: "test_sales_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+        can_connect_to_business: false,
+        has_main_web_app: false,
+      } as any;
+
+      const sentMessages: string[] = [];
+      const sentDocuments: any[] = [];
+      bot.api.config.use(async (prev, method, payload: any) => {
+        if (method === "sendMessage") {
+          sentMessages.push(payload.text);
+          return { ok: true, result: { message_id: 130, chat: { id: payload.chat_id } } } as any;
+        }
+        if (method === "sendDocument") {
+          sentDocuments.push(payload);
+          return { ok: true, result: { message_id: 131, chat: { id: payload.chat_id } } } as any;
+        }
+        return prev(method, payload);
+      });
+
+      await bot.handleUpdate({
+        update_id: 1008,
+        message: {
+          message_id: 62,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 888001, type: "private" } as any,
+          from: { id: 888001, is_bot: false, first_name: "Rep Daniel" },
+          text: "/invoice deal_777",
+          entities: [{ offset: 0, length: 8, type: "bot_command" }],
+        },
+      });
+
+      expect(mockDealsService.getDeal).toHaveBeenCalledWith("deal_777");
+      expect(mockDealsService.getProformaInvoiceData).toHaveBeenCalledWith("deal_777");
+      expect(sentMessages[0]).toContain("Generating official YC Electric Proforma Invoice PDF");
+      expect(sentDocuments.length).toBe(1);
+      expect(sentDocuments[0].caption).toContain("MK Digital PLC");
+      expect(sentDocuments[0].caption).toContain("5,200,000");
+    });
+
+    it("handles /invoice with no args by offering inline buttons of recent deals", async () => {
+      const mockNotionClient: Partial<ResilientNotionClient> = {};
+      const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+      vi.spyOn(salesRepsService, "findSalesRepByTelegramId").mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "888001",
+        fullName: "Rep Daniel",
+        role: "Sales Rep",
+        status: "Active",
+      } as any);
+
+      const mockDealsService = {
+        listDealsForRep: vi.fn().mockResolvedValue([
+          { pageId: "deal_1", companyName: "ABC Corp", stage: "Proposal" },
+          { pageId: "deal_2", title: "XYZ PLC Deal", stage: "Qualified" },
+        ]),
+      };
+
+      const bot = createBot({
+        token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+        salesRepsService,
+        dealsService: mockDealsService as any,
+        managerChatIds: [999001],
+      });
+
+      bot.botInfo = {
+        id: 123456789,
+        is_bot: true,
+        first_name: "TestBot",
+        username: "test_sales_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+        can_connect_to_business: false,
+        has_main_web_app: false,
+      } as any;
+
+      const sentMessages: any[] = [];
+      bot.api.config.use(async (prev, method, payload: any) => {
+        if (method === "sendMessage") {
+          sentMessages.push(payload);
+          return { ok: true, result: { message_id: 132, chat: { id: payload.chat_id } } } as any;
+        }
+        return prev(method, payload);
+      });
+
+      await bot.handleUpdate({
+        update_id: 1009,
+        message: {
+          message_id: 63,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 888001, type: "private" } as any,
+          from: { id: 888001, is_bot: false, first_name: "Rep Daniel" },
+          text: "/invoice",
+          entities: [{ offset: 0, length: 8, type: "bot_command" }],
+        },
+      });
+
+      expect(mockDealsService.listDealsForRep).toHaveBeenCalled();
+      expect(sentMessages.length).toBe(1);
+      expect(sentMessages[0].text).toContain("Select a deal to generate an official YC Electric Proforma Invoice PDF");
+      expect(sentMessages[0].reply_markup.inline_keyboard.length).toBe(2);
+      expect(sentMessages[0].reply_markup.inline_keyboard[0][0].callback_data).toBe("inv:deal_1");
+    });
+  });
 });

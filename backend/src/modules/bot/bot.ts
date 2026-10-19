@@ -1,16 +1,19 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import { env } from "../../config/env.js";
 import { getNotionClient } from "../notion/notionClient.js";
 import { SalesRepsService } from "../notion/salesRepsService.js";
 import { OnboardingController } from "./onboarding.js";
 import { ReportsService } from "../reports/reportsService.js";
 import type { LeadsService } from "../leads/leadsService.js";
+import type { DealsService } from "../deals/dealsService.js";
+import { ProformaPdfService } from "../proforma/proformaPdfService.js";
 
 export interface CreateBotOptions {
   token?: string | undefined;
   salesRepsService?: SalesRepsService | undefined;
   reportsService?: ReportsService | undefined;
   leadsService?: LeadsService | undefined;
+  dealsService?: DealsService | undefined;
   managerChatIds?: number[] | undefined;
   miniAppUrl?: string | undefined;
 }
@@ -25,6 +28,7 @@ export function parseManagerChatIds(raw?: string): number[] {
 
 let registeredReportsService: ReportsService | null = null;
 let registeredLeadsService: LeadsService | null = null;
+let registeredDealsService: DealsService | null = null;
 
 export function setBotReportsService(service: ReportsService) {
   registeredReportsService = service;
@@ -34,10 +38,15 @@ export function setBotLeadsService(service: LeadsService) {
   registeredLeadsService = service;
 }
 
+export function setBotDealsService(service: DealsService) {
+  registeredDealsService = service;
+}
+
 export const DEFAULT_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
   { command: "ct", description: "Check Ethiopian TIN availability" },
+  { command: "invoice", description: "Generate Proforma Invoice PDF" },
   { command: "help", description: "Show usage commands" },
 ];
 
@@ -45,6 +54,7 @@ export const MANAGER_BOT_COMMANDS = [
   { command: "start", description: "Check access & launch CRM" },
   { command: "app", description: "Open Sales CRM Mini App" },
   { command: "ct", description: "Check Ethiopian TIN availability" },
+  { command: "invoice", description: "Generate Proforma Invoice PDF" },
   { command: "weekly_report", description: "Generate Weekly Executive Report (Managers)" },
   { command: "help", description: "Show usage commands" },
 ];
@@ -55,6 +65,10 @@ export function createBot(options: CreateBotOptions = {}) {
 
   if (options.reportsService) {
     registeredReportsService = options.reportsService;
+  }
+
+  if (options.dealsService) {
+    registeredDealsService = options.dealsService;
   }
 
   const salesRepsService =
@@ -264,6 +278,136 @@ export function createBot(options: CreateBotOptions = {}) {
       }
     });
 
+  // Helper to resolve DealsService on demand
+  const resolveDealsService = async (): Promise<DealsService | null> => {
+    let active = options.dealsService || registeredDealsService;
+    if (!active) {
+      try {
+        const { DealsService } = await import("../deals/dealsService.js");
+        active = new DealsService({
+          notionClient: getNotionClient(),
+          salesRepsService,
+          dealsDbId: env.NOTION_DEALS_DB_ID,
+          salesLogsDbId: env.NOTION_SALES_LOGS_DB_ID,
+          managerChatIds,
+          bot,
+        });
+        registeredDealsService = active;
+      } catch (err: any) {
+        console.error("Failed to initialize DealsService for bot:", err);
+      }
+    }
+    return active;
+  };
+
+  const deliverProformaPdf = async (ctx: any, dealId: string, isManager: boolean, callerRep: any) => {
+    const activeDealsService = await resolveDealsService();
+    if (!activeDealsService) {
+      await ctx.reply("Deals service is currently initializing. Please try again shortly.");
+      return;
+    }
+
+    try {
+      const deal = await activeDealsService.getDeal(dealId);
+      if (!isManager && callerRep?.fullName && deal.repName) {
+        if (deal.repName.trim().toLowerCase() !== callerRep.fullName.trim().toLowerCase()) {
+          await ctx.reply("Permission Denied: You can only generate Proforma Invoices for deals assigned to you.");
+          return;
+        }
+      }
+
+      await ctx.reply("Generating official YC Electric Proforma Invoice PDF...");
+      const proformaData = await activeDealsService.getProformaInvoiceData(dealId);
+      const pdfBuffer = await ProformaPdfService.generateProformaPdf(proformaData);
+
+      const safeName = (proformaData.customerName || dealId).replace(/[^a-zA-Z0-9_-]/g, "_");
+      await ctx.replyWithDocument(
+        new InputFile(pdfBuffer, `Proforma_Invoice_${safeName}.pdf`),
+        {
+          caption:
+            `📄 *YC Electric Equipment Manufacturing PLC*\n` +
+            `*PROFORMA INVOICE*\n\n` +
+            `• *Customer:* ${proformaData.customerName}\n` +
+            `• *Ref No:* ${proformaData.refNo}\n` +
+            `• *Total Price (incl. 15% VAT):* ETB ${proformaData.totalAmountVatIncl.toLocaleString()}\n` +
+            `• *Representative:* ${proformaData.repName} (${proformaData.repPhone})`,
+          parse_mode: "Markdown",
+        }
+      );
+    } catch (err: any) {
+      await ctx.reply(`Failed to generate Proforma Invoice: ${err.message}`);
+    }
+  };
+
+  // 4b. /invoice and /proforma command (Generate branded PDF directly in Telegram)
+  bot.command(["invoice", "proforma", "pi"], async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    const isManager = salesRepsService?.isManager
+      ? await salesRepsService.isManager(userId, managerChatIds)
+      : managerChatIds.includes(userId);
+
+    let callerRep: any = null;
+    if (!isManager) {
+      try {
+        callerRep = await salesRepsService.findSalesRepByTelegramId(userId);
+      } catch {}
+      if (!callerRep || callerRep.status !== "Active") {
+        await ctx.reply("Access Restricted: Only active sales representatives and managers can generate Proforma Invoices.");
+        return;
+      }
+    }
+
+    const text = ctx.message?.text?.trim() || "";
+    const parts = text.split(/\s+/);
+    const dealArg = parts[1]?.trim();
+
+    if (dealArg) {
+      await deliverProformaPdf(ctx, dealArg, isManager, callerRep);
+      return;
+    }
+
+    const activeDealsService = await resolveDealsService();
+    if (!activeDealsService) {
+      await ctx.reply("Deals service is currently initializing. Please try again shortly.");
+      return;
+    }
+
+    try {
+      let dealsList = isManager
+        ? await activeDealsService.listAllDeals()
+        : await activeDealsService.listDealsForRep(callerRep.pageId, callerRep.fullName);
+
+      if (dealsList.length === 0) {
+        await ctx.reply(
+          "No registered deals found in your pipeline.\n\nTo generate an invoice for a specific deal ID, type:\n`/invoice <deal_id>`",
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
+      const recentDeals = dealsList.slice(0, 5);
+      const keyboard = recentDeals.map((d) => [
+        {
+          text: `📄 ${d.companyName || d.title} (${d.stage})`,
+          callback_data: `inv:${d.pageId}`,
+        },
+      ]);
+
+      await ctx.reply(
+        "Select a deal to generate an official YC Electric Proforma Invoice PDF:",
+        {
+          reply_markup: {
+            inline_keyboard: keyboard,
+          },
+        }
+      );
+    } catch (err: any) {
+      await ctx.reply(`Could not retrieve deals: ${err.message}`);
+    }
+  });
+
   // 5. /help command
   bot.command("help", async (ctx) => {
     const userId = ctx.from?.id;
@@ -278,7 +422,8 @@ export function createBot(options: CreateBotOptions = {}) {
       "📌 Sales CRM Bot Commands:\n\n" +
       "/start - Check account status & registration\n" +
       "/app - Open the Sales CRM Mini App in Telegram\n" +
-      "/ct <tin> - Check Ethiopian TIN availability (Quick TIN check)\n";
+      "/ct <tin> - Check Ethiopian TIN availability (Quick TIN check)\n" +
+      "/invoice [deal_id] - Generate official YC Electric Proforma Invoice PDF\n";
     if (isManager) {
       text += "/weekly_report - Generate formal Weekly Executive Sales Report in Notion\n";
     }
@@ -286,8 +431,27 @@ export function createBot(options: CreateBotOptions = {}) {
     await ctx.reply(text);
   });
 
-  // 5. Inline callback queries (Role selection & Manager approvals)
+  // 6. Inline callback queries (Role selection, Manager approvals, Invoice generation)
   bot.on("callback_query:data", async (ctx) => {
+    const data = ctx.callbackQuery.data;
+    if (data.startsWith("inv:")) {
+      const dealId = data.substring(4);
+      const userId = ctx.from.id;
+      const isManager = salesRepsService?.isManager
+        ? await salesRepsService.isManager(userId, managerChatIds)
+        : managerChatIds.includes(userId);
+
+      let callerRep: any = null;
+      if (!isManager) {
+        try {
+          callerRep = await salesRepsService.findSalesRepByTelegramId(userId);
+        } catch {}
+      }
+
+      await ctx.answerCallbackQuery({ text: "Generating Proforma Invoice..." }).catch(() => {});
+      await deliverProformaPdf(ctx, dealId, isManager, callerRep);
+      return;
+    }
     await controller.handleCallbackQuery(ctx);
   });
 

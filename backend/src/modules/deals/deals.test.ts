@@ -45,6 +45,7 @@ describe("Deals API Endpoints (/api/deals)", () => {
     mockDealsService = {
       submitPaymentProof: vi.fn(),
       getDeal: vi.fn(),
+      getProformaInvoiceData: vi.fn(),
     };
 
     mockSalesRepsService = {
@@ -295,6 +296,74 @@ describe("Deals API Endpoints (/api/deals)", () => {
       const data: any = await res.json();
       expect(data.success).toBe(true);
       expect(data.deal.title).toBe("Coffee Export Contract");
+    });
+  });
+
+  describe("GET /api/deals/:id/proforma-invoice", () => {
+    it("rejects unauthenticated requests with 401", async () => {
+      const res = await fetch(`${baseUrl}/api/deals/deal_123/proforma-invoice`);
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects unauthorized sales rep from accessing another rep's deal with 403", async () => {
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "998877",
+        fullName: "Rep Daniel",
+        role: "Sales Rep",
+        status: "Active",
+      });
+
+      (mockDealsService.getDeal as any).mockResolvedValue({
+        pageId: "deal_other",
+        title: "Other Deal",
+        repName: "Someone Else",
+      });
+
+      const res = await fetch(`${baseUrl}/api/deals/deal_other/proforma-invoice`, {
+        headers: { Authorization: repAuthHeader },
+      });
+
+      expect(res.status).toBe(403);
+      const data: any = await res.json();
+      expect(data.error).toContain("Forbidden");
+    });
+
+    it("returns 200 with application/pdf attachment for authorized rep", async () => {
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockResolvedValue({
+        pageId: "rep_p1",
+        telegramId: "998877",
+        fullName: "Rep Daniel",
+        role: "Sales Rep",
+        status: "Active",
+      });
+
+      (mockDealsService.getDeal as any).mockResolvedValue({
+        pageId: "deal_123",
+        title: "MK Digital PLC",
+        repName: "Rep Daniel",
+      });
+
+      (mockDealsService.getProformaInvoiceData as any).mockResolvedValue({
+        dealId: "deal_123",
+        refNo: "PI/0123/YC/25",
+        date: "Oct/19/2026",
+        customerName: "MK Digital PLC",
+        productDescription: "SILENT DIESEL GENERATOR SET",
+        totalAmountVatIncl: 5000000,
+        repName: "Rep Daniel",
+        repPhone: "0911223344",
+      });
+
+      const res = await fetch(`${baseUrl}/api/deals/deal_123/proforma-invoice`, {
+        headers: { Authorization: repAuthHeader },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("application/pdf");
+      expect(res.headers.get("content-disposition")).toContain("Proforma_Invoice_MK_Digital_PLC.pdf");
+      const buffer = await res.arrayBuffer();
+      expect(buffer.byteLength).toBeGreaterThan(100);
     });
   });
 });

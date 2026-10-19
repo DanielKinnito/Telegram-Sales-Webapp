@@ -1,5 +1,6 @@
 import type { ResilientNotionClient } from "../notion/notionClient.js";
 import type { SalesRepsService } from "../notion/salesRepsService.js";
+import type { ProformaInvoiceData } from "../proforma/proformaPdfService.js";
 import { env } from "../../config/env.js";
 
 export function formatTimeTo12Hour(timeStr: string): string {
@@ -33,6 +34,7 @@ export interface DealRecord {
   productType?: string | null;
   offerAmount?: number | null;
   lostReason?: string | null;
+  repName?: string | null;
 }
 
 export interface ActivityRecord {
@@ -306,6 +308,16 @@ export class DealsService {
       const productType = props?.["Product Type"]?.rich_text?.[0]?.plain_text ?? null;
       const offerAmount = props?.["Offer VAT Incl"]?.number ?? amount;
       const lostReason = props?.["Lost Reason"]?.rich_text?.[0]?.plain_text ?? null;
+      const repName = props?.["Rep Name"]?.rich_text?.[0]?.plain_text || null;
+      const companyName =
+        props?.["Account Name"]?.rich_text?.[0]?.plain_text ||
+        props?.["Company Name"]?.title?.[0]?.plain_text ||
+        props?.["Company Name"]?.rich_text?.[0]?.plain_text ||
+        null;
+      const tin =
+        props?.["TIN"]?.rich_text?.[0]?.plain_text ||
+        props?.["TIN"]?.title?.[0]?.plain_text ||
+        null;
 
       return {
         pageId: page.id,
@@ -317,10 +329,57 @@ export class DealsService {
         productType,
         offerAmount,
         lostReason,
+        repName,
+        companyName,
+        tin,
       };
     } catch {
       throw new Error(`Deal not found: ${pageId}`);
     }
+  }
+
+  /**
+   * Constructs the structured Proforma Invoice data for a deal, including customer info,
+   * 15% VAT amounts, equipment description, and assigned sales representative contact details.
+   */
+  public async getProformaInvoiceData(dealId: string): Promise<ProformaInvoiceData> {
+    const deal = await this.getDeal(dealId);
+    let repPhone = "N/A";
+
+    if (deal.repName && this.salesRepsService) {
+      try {
+        const reps = await this.salesRepsService.getActiveSalesReps();
+        const found = reps.find(
+          (r) => r.fullName.trim().toLowerCase() === deal.repName!.trim().toLowerCase()
+        );
+        if (found && found.phone) {
+          repPhone = found.phone;
+        }
+      } catch {}
+    }
+
+    const now = new Date();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formattedDate = `${months[now.getMonth()]}/${String(now.getDate()).padStart(2, "0")}/${now.getFullYear()}`;
+
+    const cleanId = dealId.replace(/-/g, "").slice(-4).toUpperCase() || "0100";
+    const yearShort = String(now.getFullYear()).slice(-2);
+    const refNo = `PI/${cleanId}/YC/${yearShort}`;
+
+    const totalAmount = deal.offerAmount ?? deal.amount ?? 0;
+    const customer = deal.companyName || deal.title.replace(/ Order$/, "").trim() || "Valued Customer";
+
+    return {
+      dealId: deal.pageId,
+      refNo,
+      date: formattedDate,
+      customerName: customer,
+      customerTin: deal.tin || undefined,
+      productDescription: deal.productType || "SILENT DIESEL GENERATOR SET (Standard Industrial Supply)",
+      totalAmountVatIncl: totalAmount,
+      repName: deal.repName || "Sales Representative",
+      repPhone,
+    };
   }
 
   /**

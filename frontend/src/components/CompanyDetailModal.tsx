@@ -64,6 +64,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [callTime, setCallTime] = useState('10:00');
   const [callObjective, setCallObjective] = useState('');
   const [isSchedulingCall, setIsSchedulingCall] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -278,6 +279,29 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
+  const handleDownloadInvoice = async () => {
+    setIsDownloadingPdf(true);
+    triggerHaptic('medium');
+    try {
+      await api.downloadProformaInvoice(currentDeal.pageId, displayName);
+      triggerHaptic('success');
+      setNotification({
+        type: 'success',
+        message: '📄 Official Proforma Invoice PDF downloaded!',
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch (err: any) {
+      triggerHaptic('error');
+      setNotification({
+        type: 'error',
+        message: `Failed to download PDF: ${err.message}`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="w-full sm:max-w-lg bg-white dark:bg-[#1c1c1e] rounded-t-3xl sm:rounded-3xl border border-black/10 dark:border-white/10 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
@@ -426,25 +450,41 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 <Trophy className="w-4 h-4 text-emerald-600" />
                 <span>Deal Completed & Won</span>
               </div>
-              {currentDeal.proofUrl ? (
-                <a
-                  href={currentDeal.proofUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold underline flex items-center space-x-1"
-                >
-                  <span>View Bank Receipt</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              ) : (
+              <div className="flex items-center space-x-1.5">
                 <button
                   type="button"
-                  onClick={onOpenPaymentModal}
-                  className="px-3 py-1 rounded-xl bg-emerald-600 text-white font-medium text-[11px] apple-press"
+                  disabled={isDownloadingPdf}
+                  onClick={handleDownloadInvoice}
+                  className="px-2.5 py-1 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] font-semibold text-[11px] apple-press flex items-center space-x-1 disabled:opacity-50"
+                  title="Download Proforma Invoice PDF"
                 >
-                  Attach Bank Receipt
+                  {isDownloadingPdf ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <FileText className="w-3 h-3" />
+                  )}
+                  <span>Proforma PDF</span>
                 </button>
-              )}
+                {currentDeal.proofUrl ? (
+                  <a
+                    href={currentDeal.proofUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold underline flex items-center space-x-1"
+                  >
+                    <span>Receipt</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onOpenPaymentModal}
+                    className="px-3 py-1 rounded-xl bg-emerald-600 text-white font-medium text-[11px] apple-press"
+                  >
+                    Attach Receipt
+                  </button>
+                )}
+              </div>
             </div>
           ) : currentDeal.stage === 'Lost' ? (
             <div className="flex items-center justify-between p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40 text-xs">
@@ -466,19 +506,33 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   Deal Actions
                 </span>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  disabled={isDownloadingPdf}
+                  onClick={handleDownloadInvoice}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] font-semibold text-xs apple-press flex items-center space-x-1 disabled:opacity-50"
+                  title="Download Proforma Invoice PDF"
+                >
+                  {isDownloadingPdf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5" />
+                  )}
+                  <span>Proforma PDF</span>
+                </button>
                 <button
                   type="button"
                   disabled={isCompletingDeal}
                   onClick={handleMarkWon}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs apple-press shadow-xs flex items-center space-x-1 disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs apple-press shadow-xs flex items-center space-x-1 disabled:opacity-50"
                 >
                   {isCompletingDeal ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <>
                       <Trophy className="w-3.5 h-3.5" />
-                      <span>WON DEAL</span>
+                      <span>WON</span>
                     </>
                   )}
                 </button>
@@ -689,6 +743,22 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     </>
                   )}
                 </button>
+
+                <div className="pt-2 border-t border-black/5 dark:border-white/5">
+                  <button
+                    type="button"
+                    disabled={isDownloadingPdf}
+                    onClick={handleDownloadInvoice}
+                    className="w-full h-11 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] font-semibold text-xs apple-press flex items-center justify-center space-x-2 disabled:opacity-50 border border-[#0071e3]/20"
+                  >
+                    {isDownloadingPdf ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-[#0071e3]" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-[#0071e3]" />
+                    )}
+                    <span>Download Official Proforma Invoice (PDF)</span>
+                  </button>
+                </div>
               </form>
             </div>
           )}

@@ -125,6 +125,14 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
       })
     );
 
+    const createPageCall = (mockNotionClient.createPage as any).mock.calls[0][0];
+    expect(createPageCall.children[0].paragraph.rich_text[0].text.content).toContain(
+      "YC ELECTRIC EQUIPMENT MANUFACTURING PLC"
+    );
+    expect(createPageCall.children[0].paragraph.rich_text[1].text.content).toContain(
+      "Nifasselk Lafto, Addis Ababa, Ethiopia"
+    );
+
     // Verify Telegram alert dispatch to Manager
     expect(mockBot.api.sendMessage).toHaveBeenCalledWith(
       12345,

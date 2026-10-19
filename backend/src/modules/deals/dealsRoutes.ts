@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifyTelegramAuth, type AuthenticatedRequest } from "../auth/telegramAuth.js";
 import { DealsService } from "./dealsService.js";
 import type { SalesRepsService } from "../notion/salesRepsService.js";
+import { ProformaPdfService } from "../proforma/proformaPdfService.js";
 
 export interface DealsRouterOptions {
   dealsService: DealsService;
@@ -246,6 +247,50 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
       return res.status(201).json({ success: true, activity });
     } catch (err: any) {
       return res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+  });
+
+  // 6. Download Proforma Invoice PDF
+  router.get("/:id/proforma-invoice", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const dealId = Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!;
+      const telegramUser = req.telegramUser;
+      if (!telegramUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Check caller authorization
+      let isManager = false;
+      let repFullName = "";
+      if (salesRepsService) {
+        const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
+        if (!caller || caller.status !== "Active") {
+          return res.status(403).json({ error: "Forbidden: Not an active staff member" });
+        }
+        isManager = caller.role === "Manager";
+        repFullName = caller.fullName || "";
+      }
+
+      const deal = await dealsService.getDeal(dealId);
+      // If not manager, sales rep can only access their own deal (or unassigned deal)
+      if (!isManager && repFullName && deal.repName) {
+        if (deal.repName.trim().toLowerCase() !== repFullName.trim().toLowerCase()) {
+          return res.status(403).json({ error: "Forbidden: You are not assigned to this deal" });
+        }
+      }
+
+      const proformaData = await dealsService.getProformaInvoiceData(dealId);
+      const pdfBuffer = await ProformaPdfService.generateProformaPdf(proformaData);
+
+      const safeName = (proformaData.customerName || dealId).replace(/[^a-zA-Z0-9_-]/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Proforma_Invoice_${safeName}.pdf"`);
+      return res.status(200).send(pdfBuffer);
+    } catch (err: any) {
+      if (err.message?.includes("Deal not found")) {
+        return res.status(404).json({ error: "Not Found", message: err.message });
+      }
+      return res.status(500).json({ error: "Failed to generate Proforma Invoice", details: err.message });
     }
   });
 
