@@ -258,49 +258,108 @@ export class ReportsService {
 
     // 5. Construct Formal Professional Notion Document Blocks (NO emojis, NO AI fluff)
     const pageBlocks: any[] = [
-      // Optional Corporate Brand Logo Header Block
+      // Formal Institutional Corporate Letterhead (Side-by-side Logo and Company Details)
       ...(logoUrl
         ? [
             {
-              type: "image",
-              image: {
-                type: "external",
-                external: {
-                  url: logoUrl,
-                },
+              type: "column_list",
+              column_list: {
+                children: [
+                  {
+                    type: "column",
+                    column: {
+                      children: [
+                        {
+                          type: "image",
+                          image: {
+                            type: "external",
+                            external: {
+                              url: logoUrl,
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  {
+                    type: "column",
+                    column: {
+                      children: [
+                        {
+                          type: "paragraph",
+                          paragraph: {
+                            rich_text: [
+                              {
+                                type: "text",
+                                text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC\n" },
+                                annotations: { bold: true },
+                              },
+                              {
+                                type: "text",
+                                text: { content: "玉柴船电动力 | YUCHAI MARINE & GENSET POWER\n" },
+                                annotations: { bold: true, color: "blue" },
+                              },
+                              {
+                                type: "text",
+                                text: {
+                                  content:
+                                    "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com\n" +
+                                    "Tel: +251900640028 / +251929296636\n",
+                                },
+                                annotations: { bold: false, color: "gray" },
+                              },
+                              {
+                                type: "text",
+                                text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES REPORT\n" },
+                                annotations: { bold: true, color: "blue" },
+                              },
+                              {
+                                type: "text",
+                                text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
+                                annotations: { italic: true, color: "gray" },
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
               },
             },
           ]
-        : []),
-
-      // Formal Institutional Corporate Letterhead Header
-      {
-        type: "paragraph",
-        paragraph: {
-          rich_text: [
+        : [
             {
-              type: "text",
-              text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC (玉柴船电动力)\n" },
-              annotations: { bold: true },
+              type: "paragraph",
+              paragraph: {
+                rich_text: [
+                  {
+                    type: "text",
+                    text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC (玉柴船电动力)\n" },
+                    annotations: { bold: true },
+                  },
+                  {
+                    type: "text",
+                    text: {
+                      content:
+                        "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com | Tel: +251900640028 / +251929296636\n",
+                    },
+                    annotations: { bold: false, color: "gray" },
+                  },
+                  {
+                    type: "text",
+                    text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES PERFORMANCE REPORT\n" },
+                    annotations: { bold: true, color: "blue" },
+                  },
+                  {
+                    type: "text",
+                    text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
+                    annotations: { italic: true, color: "gray" },
+                  },
+                ],
+              },
             },
-            {
-              type: "text",
-              text: { content: "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com | Tel: +251900640028 / +251929296636\n" },
-              annotations: { bold: false, color: "gray" },
-            },
-            {
-              type: "text",
-              text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES PERFORMANCE REPORT\n" },
-              annotations: { bold: true, color: "blue" },
-            },
-            {
-              type: "text",
-              text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
-              annotations: { italic: true, color: "gray" },
-            },
-          ],
-        },
-      },
+          ]),
       { type: "divider", divider: {} },
 
       // Audit Metadata Table

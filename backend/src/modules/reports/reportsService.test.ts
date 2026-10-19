@@ -126,17 +126,38 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
     );
 
     const createPageCall = (mockNotionClient.createPage as any).mock.calls[0][0];
-    const headerParagraph = createPageCall.children.find((c: any) => c.type === "paragraph");
-    expect(headerParagraph).toBeDefined();
-    expect(headerParagraph.paragraph.rich_text[0].text.content).toContain(
-      "YC ELECTRIC EQUIPMENT MANUFACTURING PLC"
-    );
-    expect(headerParagraph.paragraph.rich_text[1].text.content).toContain(
-      "Nifasselk Lafto, Addis Ababa, Ethiopia"
-    );
+    const findTextContent = (blocks: any[], pattern: string): boolean => {
+      for (const b of blocks) {
+        if (b.type === "paragraph" && b.paragraph?.rich_text) {
+          if (b.paragraph.rich_text.some((t: any) => t.text?.content?.includes(pattern))) return true;
+        }
+        if (b.type === "column_list" && b.column_list?.children) {
+          for (const col of b.column_list.children) {
+            if (findTextContent(col.column?.children || [], pattern)) return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    expect(findTextContent(createPageCall.children, "YC ELECTRIC EQUIPMENT MANUFACTURING PLC")).toBe(true);
+    expect(findTextContent(createPageCall.children, "Nifasselk Lafto, Addis Ababa, Ethiopia")).toBe(true);
 
     // Verify brand logo image block
-    const imageBlock = createPageCall.children.find((c: any) => c.type === "image");
+    const findImageBlock = (blocks: any[]): any => {
+      for (const b of blocks) {
+        if (b.type === "image") return b;
+        if (b.type === "column_list" && b.column_list?.children) {
+          for (const col of b.column_list.children) {
+            const img = findImageBlock(col.column?.children || []);
+            if (img) return img;
+          }
+        }
+      }
+      return null;
+    };
+
+    const imageBlock = findImageBlock(createPageCall.children);
     if (imageBlock) {
       expect(imageBlock.image.external.url).toContain("assets/company_logo.png");
     }
