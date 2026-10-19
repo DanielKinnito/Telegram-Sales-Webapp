@@ -22,9 +22,12 @@ export interface LineItem {
 }
 
 export interface CreateAdjustmentRequestInput {
-  itemId?: string;
+  itemId?: string | undefined;
   itemCode: string;
-  productName?: string;
+  productName?: string | undefined;
+  productDescription?: string | undefined;
+  unitPrice?: number | undefined;
+  isNewItem?: boolean | undefined;
   delta: number;
   reason: string;
   requestedByTelegramId: number;
@@ -36,26 +39,30 @@ export interface PendingStockAdjustment {
   itemId: string;
   itemCode: string;
   productName: string;
-  productDescription?: string;
+  productDescription?: string | undefined;
   currentStock: number;
   delta: number;
   newStock: number;
   unitPrice: number;
+  isNewItem?: boolean | undefined;
   reason: string;
   requestedByTelegramId: number;
   requestedByName: string;
   requestedAt: string;
   status: "Pending" | "Approved" | "Rejected";
-  approvedByName?: string;
+  approvedByName?: string | undefined;
 }
 
 export interface DirectAdjustInput {
-  itemId?: string;
+  itemId?: string | undefined;
   itemCode: string;
-  productName?: string;
-  delta?: number;
-  newQuantity?: number;
-  reason?: string;
+  productName?: string | undefined;
+  productDescription?: string | undefined;
+  unitPrice?: number | undefined;
+  isNewItem?: boolean | undefined;
+  delta?: number | undefined;
+  newQuantity?: number | undefined;
+  reason?: string | undefined;
   updatedByName: string;
 }
 
@@ -130,7 +137,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
 ];
 
 export class InventoryService {
-  private readonly notionClient?: ResilientNotionClient;
+  private readonly notionClient?: ResilientNotionClient | undefined;
   private readonly inventoryDbId: string;
   private readonly salesLogsDbId: string;
 
@@ -237,20 +244,22 @@ export class InventoryService {
   }
 
   /**
-   * Front Desk creates a pending inventory adjustment request.
+   * Front Desk creates a pending inventory adjustment request or proposes a new product.
    * Generates a unique requestId and stores before/after calculations.
    */
   public async createAdjustmentRequest(
     input: CreateAdjustmentRequestInput
   ): Promise<PendingStockAdjustment> {
-    const item = await this.findItemByCodeOrName(input.itemCode || input.productName || "");
+    const isNewItem = Boolean(input.isNewItem);
+    const item = isNewItem ? null : await this.findItemByCodeOrName(input.itemCode || input.productName || "");
     const currentStock = item ? item.quantityInStock : 0;
-    const delta = input.delta || 0;
-    const newStock = Math.max(0, currentStock + delta);
-    const unitPrice = item ? item.unitPrice : 0;
+    const delta = input.delta || (isNewItem ? 1 : 0);
+    const newStock = isNewItem ? delta : Math.max(0, currentStock + delta);
+    const unitPrice = input.unitPrice ?? (item ? item.unitPrice : 0);
     const itemId = item ? item.id : `item-${Date.now()}`;
-    const productName = item ? item.productName : input.productName || input.itemCode;
-    const itemCode = item ? item.itemCode : input.itemCode;
+    const productName = input.productName || (item ? item.productName : input.itemCode);
+    const itemCode = input.itemCode ? input.itemCode.trim().toUpperCase() : (item ? item.itemCode : "NEW-ITEM");
+    const productDescription = input.productDescription || (item ? item.productDescription : "");
 
     const shortId = `req_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
@@ -260,12 +269,13 @@ export class InventoryService {
       itemId,
       itemCode,
       productName,
-      productDescription: item ? item.productDescription : undefined,
+      productDescription,
       currentStock,
       delta,
       newStock,
       unitPrice,
-      reason: input.reason || "Inventory Adjustment",
+      isNewItem,
+      reason: input.reason || (isNewItem ? "New Inventory Model Proposal" : "Inventory Adjustment"),
       requestedByTelegramId: input.requestedByTelegramId,
       requestedByName: input.requestedByName,
       requestedAt: now,
@@ -291,8 +301,117 @@ export class InventoryService {
   }
 
   /**
-   * Manager approves a pending adjustment.
-   * Applies the new stock count, updates Notion if connected, and marks request Approved.
+   * Creates a brand new equipment item in Notion and catalog cache.
+   */
+  public async createCatalogItem(input: {
+    itemCode: string;
+    productName: string;
+    productDescription?: string | undefined;
+    unitPrice: number;
+    quantityInStock: number;
+    auditNote?: string | undefined;
+  }): Promise<InventoryItem> {
+    const cleanCode = input.itemCode.trim().toUpperCase();
+    const cleanName = input.productName.trim();
+    const cleanDesc = input.productDescription?.trim() || "";
+    const cleanPrice = Number(input.unitPrice) || 0;
+    const initialQty = Math.max(0, Number(input.quantityInStock) || 0);
+    const status: InventoryItem["status"] =
+      initialQty === 0 ? "Out of Stock" : initialQty <= 2 ? "Low Stock" : "In Stock";
+
+    let createdId = `item-${Date.now()}`;
+
+    // Create page in Notion Inventory DB if configured
+    if (this.notionClient && this.inventoryDbId) {
+      try {
+        const page = await this.notionClient.createPage({
+          parent: { database_id: this.inventoryDbId },
+          properties: {
+            "Product Name": {
+              title: [{ text: { content: cleanName } }],
+            },
+            "Item Code": {
+              rich_text: [{ text: { content: cleanCode } }],
+            },
+            "Technical Specs": {
+              rich_text: [{ text: { content: cleanDesc } }],
+            },
+            "Price": {
+              number: cleanPrice,
+            },
+            "Quantity in Stock": {
+              number: initialQty,
+            },
+            "Status": {
+              select: { name: status },
+            },
+          },
+        });
+        if (page?.id) createdId = page.id;
+      } catch (err: any) {
+        console.warn(`Could not create Notion page for new item ${cleanCode}:`, err.message);
+      }
+    }
+
+    const newItem: InventoryItem = {
+      id: createdId,
+      itemCode: cleanCode,
+      productName: cleanName,
+      productDescription: cleanDesc,
+      unitPrice: cleanPrice,
+      quantityInStock: initialQty,
+      status,
+    };
+
+    // Update memory cache
+    const existingIdx = this.catalogCache.findIndex(
+      (c) => c.itemCode.toLowerCase() === cleanCode.toLowerCase()
+    );
+    if (existingIdx >= 0) {
+      this.catalogCache[existingIdx] = newItem;
+    } else {
+      this.catalogCache.push(newItem);
+    }
+    this.lastCacheTime = Date.now();
+
+    // Log to Notion Sales Logs
+    if (this.notionClient && this.salesLogsDbId) {
+      try {
+        const today = new Date().toISOString().split("T")[0]!;
+        await this.notionClient.createPage({
+          parent: { database_id: this.salesLogsDbId },
+          properties: {
+            "Log Title / ID": {
+              title: [{ text: { content: `[Inventory] New Item Added: ${cleanCode}` } }],
+            },
+            "Interaction Type": {
+              select: { name: "Note" },
+            },
+            "Activity Date": {
+              date: { start: today },
+            },
+            "Note Content": {
+              rich_text: [
+                {
+                  text: {
+                    content: `Added new item ${cleanName} (${cleanCode}) with ${initialQty} units at ${cleanPrice.toLocaleString()} ETB. ${input.auditNote || ""}`,
+                  },
+                },
+              ],
+            },
+          },
+        });
+      } catch (logErr: any) {
+        console.warn("Could not log new item to Notion Sales Logs:", logErr.message);
+      }
+    }
+
+    return newItem;
+  }
+
+  /**
+   * Manager approves a pending adjustment or new item proposal.
+   * Applies the new stock count or creates the new catalog item in Notion.
    */
   public async approveAdjustment(
     requestId: string,
@@ -303,11 +422,24 @@ export class InventoryService {
       throw new Error(`Adjustment request not found or already processed: ${requestId}`);
     }
 
-    const updatedItem = await this.applyStockChange(
-      request.itemCode,
-      request.newStock,
-      `Approved by Manager ${managerName}: ${request.reason}`
-    );
+    let updatedItem: InventoryItem;
+
+    if (request.isNewItem) {
+      updatedItem = await this.createCatalogItem({
+        itemCode: request.itemCode,
+        productName: request.productName,
+        productDescription: request.productDescription,
+        unitPrice: request.unitPrice,
+        quantityInStock: request.newStock,
+        auditNote: `Approved by Manager ${managerName}. Requested by ${request.requestedByName}. Note: ${request.reason}`,
+      });
+    } else {
+      updatedItem = await this.applyStockChange(
+        request.itemCode,
+        request.newStock,
+        `Approved by Manager ${managerName}: ${request.reason}`
+      );
+    }
 
     request.status = "Approved";
     request.approvedByName = managerName;
@@ -317,7 +449,7 @@ export class InventoryService {
   }
 
   /**
-   * Manager rejects a pending adjustment.
+   * Manager rejects a pending adjustment or new item proposal.
    */
   public async rejectAdjustment(
     requestId: string,
@@ -336,11 +468,33 @@ export class InventoryService {
   }
 
   /**
-   * Direct stock adjustment (for Managers or automated routines).
+   * Direct stock adjustment or item creation (for Managers).
    */
   public async directAdjustStock(input: DirectAdjustInput): Promise<InventoryItem> {
+    if (input.isNewItem) {
+      return this.createCatalogItem({
+        itemCode: input.itemCode,
+        productName: input.productName || input.itemCode,
+        productDescription: input.productDescription,
+        unitPrice: input.unitPrice || 0,
+        quantityInStock: input.newQuantity ?? (input.delta ?? 1),
+        auditNote: `Direct manager creation by ${input.updatedByName}: ${input.reason || "Manual addition"}`,
+      });
+    }
+
     const item = await this.findItemByCodeOrName(input.itemCode || input.productName || "");
     if (!item) {
+      if (input.productName) {
+        // Fallback: create as new item if not found but details provided
+        return this.createCatalogItem({
+          itemCode: input.itemCode,
+          productName: input.productName,
+          productDescription: input.productDescription,
+          unitPrice: input.unitPrice || 0,
+          quantityInStock: input.newQuantity ?? (input.delta ?? 1),
+          auditNote: `Direct manager creation by ${input.updatedByName}: ${input.reason || "Manual addition"}`,
+        });
+      }
       throw new Error(`Inventory item not found: ${input.itemCode}`);
     }
 

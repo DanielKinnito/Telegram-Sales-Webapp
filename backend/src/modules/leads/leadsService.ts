@@ -236,11 +236,11 @@ export class LeadsService {
           "Stage": {
             select: { name: "Proposal" },
           },
-          "Account": {
-            relation: [{ id: page.id }],
+          "Account Name": {
+            rich_text: [{ text: { content: input.companyName.trim() } }],
           },
-          "Assigned Rep": {
-            relation: [{ id: rep.pageId }],
+          "Rep Name": {
+            rich_text: [{ text: { content: rep.fullName } }],
           },
         },
       });

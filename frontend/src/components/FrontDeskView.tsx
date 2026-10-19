@@ -44,13 +44,22 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
     message: string;
   } | null>(null);
 
-  // Stock Adjustment Modal State
+  // Stock Adjustment & New Item Modal State
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'adjust_existing' | 'add_new'>('adjust_existing');
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [adjustmentType, setAdjustmentType] = useState<'add' | 'deduct'>('add');
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(1);
   const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   const [isSubmittingAdjustment, setIsSubmittingAdjustment] = useState<false | 'request' | 'direct'>(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // New Item State
+  const [newItemCode, setNewItemCode] = useState('');
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductDescription, setNewProductDescription] = useState('');
+  const [newUnitPrice, setNewUnitPrice] = useState<number>(0);
+  const [newInitialStock, setNewInitialStock] = useState<number>(1);
 
   useEffect(() => {
     if (activeSubTab === 'inventory') {
@@ -125,31 +134,117 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
   };
 
   // Inventory Handlers
-  const openAdjustmentModal = (item?: InventoryItem) => {
+  const openAdjustmentModal = (
+    item?: InventoryItem,
+    mode: 'adjust_existing' | 'add_new' = 'adjust_existing'
+  ) => {
+    setModalMode(mode);
     setSelectedItem(item || (catalog.length > 0 ? catalog[0]! : null));
     setAdjustmentType('add');
     setAdjustmentAmount(1);
     setAdjustmentReason('');
+    setNewItemCode('');
+    setNewProductName('');
+    setNewProductDescription('');
+    setNewUnitPrice(0);
+    setNewInitialStock(1);
+    setModalError(null);
     setIsAdjustmentModalOpen(true);
     triggerHaptic('light');
   };
 
   const handleStockAdjustmentSubmit = async (mode: 'request' | 'direct') => {
-    if (!selectedItem) return;
+    setModalError(null);
+
+    // MODE 1: PROPOSE OR ADD NEW INVENTORY ITEM
+    if (modalMode === 'add_new') {
+      if (!newItemCode.trim()) {
+        setModalError('Item Code is required (e.g. GF3-30KW).');
+        triggerHaptic('error');
+        return;
+      }
+      if (!newProductName.trim()) {
+        setModalError('Product Name is required (e.g. 30kW Silent Diesel Generator Set).');
+        triggerHaptic('error');
+        return;
+      }
+      if (newInitialStock <= 0) {
+        setModalError('Initial Stock units must be at least 1 unit.');
+        triggerHaptic('error');
+        return;
+      }
+      if (!adjustmentReason.trim()) {
+        setModalError('Please provide a documentation reason or note for this new item.');
+        triggerHaptic('error');
+        return;
+      }
+
+      setIsSubmittingAdjustment(mode);
+      triggerHaptic('medium');
+
+      try {
+        if (mode === 'direct' && activeRole === 'manager') {
+          await api.directAdjustStock({
+            isNewItem: true,
+            itemCode: newItemCode.trim(),
+            productName: newProductName.trim(),
+            productDescription: newProductDescription.trim() || undefined,
+            unitPrice: newUnitPrice > 0 ? newUnitPrice : undefined,
+            newQuantity: newInitialStock,
+            reason: adjustmentReason.trim(),
+          });
+          triggerHaptic('success');
+          setInventoryNotification({
+            type: 'success',
+            title: 'New Product Added Immediately',
+            message: `${newProductName.trim()} (${newItemCode.trim().toUpperCase()}) added to Notion inventory with ${newInitialStock} units stock by Manager override.`,
+          });
+        } else {
+          const res = await api.requestStockAdjustment({
+            isNewItem: true,
+            itemCode: newItemCode.trim(),
+            productName: newProductName.trim(),
+            productDescription: newProductDescription.trim() || undefined,
+            unitPrice: newUnitPrice > 0 ? newUnitPrice : undefined,
+            delta: newInitialStock,
+            reason: adjustmentReason.trim(),
+          });
+          triggerHaptic('success');
+          setInventoryNotification({
+            type: 'success',
+            title: 'Dispatched to Executive Managers',
+            message: `New item proposal for ${newProductName.trim()} (${newInitialStock} units) forwarded to ${res.managersNotified || 'executive'} manager(s) on Telegram for approval.`,
+          });
+        }
+
+        setIsAdjustmentModalOpen(false);
+        loadCatalog();
+      } catch (err: any) {
+        triggerHaptic('error');
+        const errMsg = err.message || 'Failed to submit new product proposal.';
+        setModalError(errMsg);
+        setInventoryNotification({
+          type: 'error',
+          title: 'Proposal Failed',
+          message: errMsg,
+        });
+      } finally {
+        setIsSubmittingAdjustment(false);
+      }
+      return;
+    }
+
+    // MODE 2: ADJUST EXISTING ITEM
+    if (!selectedItem) {
+      setModalError('Please select an equipment model from the catalog.');
+      return;
+    }
     if (adjustmentAmount <= 0) {
-      setInventoryNotification({
-        type: 'error',
-        title: 'Invalid Quantity',
-        message: 'Adjustment amount must be at least 1 unit.',
-      });
+      setModalError('Adjustment amount must be at least 1 unit.');
       return;
     }
     if (!adjustmentReason.trim()) {
-      setInventoryNotification({
-        type: 'error',
-        title: 'Reason Required',
-        message: 'Please provide a reason or note for this inventory adjustment.',
-      });
+      setModalError('Please provide a reason or note for this inventory adjustment.');
       return;
     }
 
@@ -189,10 +284,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
       loadCatalog();
     } catch (err: any) {
       triggerHaptic('error');
+      const errMsg = err.message || 'Failed to submit stock adjustment.';
+      setModalError(errMsg);
       setInventoryNotification({
         type: 'error',
         title: 'Adjustment Failed',
-        message: err.message || 'Failed to submit stock adjustment.',
+        message: errMsg,
       });
     } finally {
       setIsSubmittingAdjustment(false);
@@ -584,11 +681,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
           )}
 
           {/* ========================================================= */}
-          {/* MODAL: STOCK ADJUSTMENT FORM                              */}
+          {/* MODAL: STOCK ADJUSTMENT & NEW ITEM CREATION               */}
           {/* ========================================================= */}
-          {isAdjustmentModalOpen && selectedItem && (
+          {isAdjustmentModalOpen && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-              <div className="w-full sm:max-w-md bg-white dark:bg-[#1c1c1e] rounded-t-3xl sm:rounded-3xl border border-black/10 dark:border-white/10 shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-white dark:bg-[#1c1c1e] rounded-t-3xl sm:rounded-3xl border border-black/10 dark:border-white/10 shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 duration-300">
                 {/* Modal Header */}
                 <div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-3">
                   <div className="flex items-center space-x-2">
@@ -597,7 +694,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
                     </span>
                     <div>
                       <h3 className="font-bold text-sm text-[#1d1d1f] dark:text-[#f5f5f7]">
-                        Stock Adjustment Request
+                        {modalMode === 'add_new' ? 'Add New Product to Inventory' : 'Stock Adjustment Request'}
                       </h3>
                       <p className="text-[11px] text-[#86868b]">
                         Manager alert will include full item & stock specifications.
@@ -613,90 +710,250 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
                   </button>
                 </div>
 
-                {/* Selected Item Detail Card */}
-                <div className="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-[#0071e3]">
-                      {selectedItem.itemCode}
-                    </span>
-                    <span className="text-[#86868b] text-[11px]">
-                      Current: <strong className="text-[#1d1d1f] dark:text-white">{selectedItem.quantityInStock} units</strong>
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
-                    {selectedItem.productName}
-                  </h4>
-                  {selectedItem.productDescription && (
-                    <p className="text-[10px] text-[#86868b] line-clamp-1 italic">
-                      {selectedItem.productDescription.split('\n')[0]}
-                    </p>
-                  )}
+                {/* Sub-Tab Toggle: Adjust Existing vs Add New Item */}
+                <div className="grid grid-cols-2 p-1 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setModalMode('adjust_existing');
+                      setModalError(null);
+                      if (!selectedItem && catalog.length > 0) {
+                        setSelectedItem(catalog[0]!);
+                      }
+                    }}
+                    className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+                      modalMode === 'adjust_existing'
+                        ? 'bg-white dark:bg-zinc-800 text-[#1d1d1f] dark:text-white shadow-xs font-bold'
+                        : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-[#0071e3]" />
+                    <span>Existing Catalog Item</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setModalMode('add_new');
+                      setModalError(null);
+                    }}
+                    className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+                      modalMode === 'add_new'
+                        ? 'bg-white dark:bg-zinc-800 text-[#1d1d1f] dark:text-white shadow-xs font-bold'
+                        : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>+ Add New Product</span>
+                  </button>
                 </div>
 
-                {/* Adjustment Mode Segmented Control */}
-                <div>
-                  <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
-                    Adjustment Type *
-                  </label>
-                  <div className="grid grid-cols-2 p-1 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => setAdjustmentType('add')}
-                      className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
-                        adjustmentType === 'add'
-                          ? 'bg-emerald-600 text-white shadow-xs font-bold'
-                          : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
-                      }`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Restock / Add Stock</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAdjustmentType('deduct')}
-                      className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
-                        adjustmentType === 'deduct'
-                          ? 'bg-rose-600 text-white shadow-xs font-bold'
-                          : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
-                      }`}
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                      <span>Deduction / Audit</span>
-                    </button>
+                {/* Inline Error Message */}
+                {modalError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center space-x-2 animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <span className="leading-tight">{modalError}</span>
                   </div>
-                </div>
+                )}
 
-                {/* Amount & Calculation Preview */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium text-[11px]">
-                      Units to {adjustmentType === 'add' ? 'Add' : 'Deduct'} *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={adjustmentAmount}
-                      onChange={(e) => setAdjustmentAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-mono text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[#86868b] mb-1 font-medium text-[11px]">
-                      New Resulting Stock
-                    </label>
-                    <div className="w-full h-10 px-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 text-xs font-mono font-bold text-[#0071e3] flex items-center justify-end">
-                      {Math.max(
-                        0,
-                        selectedItem.quantityInStock +
-                          (adjustmentType === 'add' ? adjustmentAmount : -adjustmentAmount)
-                      )}{' '}
-                      units
+                {/* TAB 1: ADJUST EXISTING INVENTORY ITEM */}
+                {modalMode === 'adjust_existing' && (
+                  <div className="space-y-4">
+                    {/* Item Dropdown Selector */}
+                    <div>
+                      <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
+                        Select Equipment Model *
+                      </label>
+                      <select
+                        value={selectedItem?.itemCode || ''}
+                        onChange={(e) => {
+                          if (e.target.value === '__add_new__') {
+                            setModalMode('add_new');
+                            return;
+                          }
+                          const found = catalog.find((i) => i.itemCode === e.target.value);
+                          if (found) setSelectedItem(found);
+                        }}
+                        className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                      >
+                        {catalog.map((i) => (
+                          <option key={i.itemCode} value={i.itemCode}>
+                            {i.itemCode} — {i.productName} ({i.quantityInStock} in stock)
+                          </option>
+                        ))}
+                        <option value="__add_new__">+ Add New Equipment Model...</option>
+                      </select>
+                    </div>
+
+                    {/* Selected Item Detail Card */}
+                    {selectedItem && (
+                      <div className="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-bold text-[#0071e3]">
+                            {selectedItem.itemCode}
+                          </span>
+                          <span className="text-[#86868b] text-[11px]">
+                            Current: <strong className="text-[#1d1d1f] dark:text-white">{selectedItem.quantityInStock} units</strong>
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
+                          {selectedItem.productName}
+                        </h4>
+                        <div className="flex items-center justify-between text-[11px] text-[#86868b]">
+                          <span>Catalog Price: <strong>ETB {selectedItem.unitPrice.toLocaleString()}</strong></span>
+                        </div>
+                        {selectedItem.productDescription && (
+                          <p className="text-[10px] text-[#86868b] line-clamp-1 italic pt-0.5">
+                            {selectedItem.productDescription.split('\n')[0]}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Adjustment Mode Segmented Control */}
+                    <div>
+                      <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
+                        Adjustment Type *
+                      </label>
+                      <div className="grid grid-cols-2 p-1 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] text-xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setAdjustmentType('add')}
+                          className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+                            adjustmentType === 'add'
+                              ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                              : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Restock / Add Stock</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdjustmentType('deduct')}
+                          className={`py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-all ${
+                            adjustmentType === 'deduct'
+                              ? 'bg-rose-600 text-white shadow-xs font-bold'
+                              : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                          }`}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                          <span>Deduction / Audit</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Amount & Calculation Preview */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium text-[11px]">
+                          Units to {adjustmentType === 'add' ? 'Add' : 'Deduct'} *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={adjustmentAmount}
+                          onChange={(e) => setAdjustmentAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-mono text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[#86868b] mb-1 font-medium text-[11px]">
+                          New Resulting Stock
+                        </label>
+                        <div className="w-full h-10 px-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 text-xs font-mono font-bold text-[#0071e3] flex items-center justify-end">
+                          {selectedItem
+                            ? Math.max(
+                                0,
+                                selectedItem.quantityInStock +
+                                  (adjustmentType === 'add' ? adjustmentAmount : -adjustmentAmount)
+                              )
+                            : 0}{' '}
+                          units
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Reason Input */}
+                {/* TAB 2: ADD NEW PRODUCT TO INVENTORY */}
+                {modalMode === 'add_new' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
+                          Item Code *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newItemCode}
+                          onChange={(e) => setNewItemCode(e.target.value.toUpperCase())}
+                          placeholder="e.g. GF3-30KW"
+                          className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-mono text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
+                          Initial Stock to Add *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={newInitialStock}
+                          onChange={(e) => setNewInitialStock(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-mono text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-semibold text-[11px]">
+                        Full Product Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newProductName}
+                        onChange={(e) => setNewProductName(e.target.value)}
+                        placeholder="e.g. 30kW Silent Diesel Generator Set"
+                        className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium text-[11px]">
+                        Catalog Price (ETB)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newUnitPrice || ''}
+                        onChange={(e) => setNewUnitPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                        placeholder="e.g. 750000"
+                        className="w-full h-10 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs font-mono text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium text-[11px]">
+                        Technical Specifications & Details
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={newProductDescription}
+                        onChange={(e) => setNewProductDescription(e.target.value)}
+                        placeholder="e.g. Standby: 33kVA, Prime: 30kVA, Engine: Yuchai 4-cylinder, 1500 RPM, 50Hz, Soundproof Enclosure..."
+                        className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Reason Input (Common for both) */}
                 <div>
                   <label className="block text-[#1d1d1f] dark:text-[#f5f5f7] mb-1 font-medium text-[11px]">
                     Reason / Documentation Note *
@@ -706,7 +963,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
                     required
                     value={adjustmentReason}
                     onChange={(e) => setAdjustmentReason(e.target.value)}
-                    placeholder="e.g. Received shipment container #2 from Akaki customs, physical stock audit correction..."
+                    placeholder={
+                      modalMode === 'add_new'
+                        ? 'e.g. Received new shipment from port, registering new product line...'
+                        : 'e.g. Received shipment container #2 from Akaki customs, physical stock audit correction...'
+                    }
                     className="w-full p-2.5 rounded-xl bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] resize-none"
                   />
                 </div>
@@ -742,7 +1003,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
                       ) : (
                         <>
                           <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          <span>Direct Stock Override (Manager)</span>
+                          <span>
+                            {modalMode === 'add_new'
+                              ? 'Direct Add Product (Manager)'
+                              : 'Direct Stock Override (Manager)'}
+                          </span>
                         </>
                       )}
                     </button>

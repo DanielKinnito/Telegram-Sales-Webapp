@@ -25,7 +25,7 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
     }
   });
 
-  // 2. Front Desk submits stock adjustment request (requires Manager approval)
+  // 2. Front Desk submits stock adjustment request or proposes a new product
   router.post("/adjust-request", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const telegramUser = req.telegramUser;
@@ -34,17 +34,17 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
       }
 
       let requesterName = `${telegramUser.firstName || ""} ${telegramUser.lastName || ""}`.trim();
-      let isFrontDeskOrManager = false;
+      const isConfigManager = managerChatIds.includes(telegramUser.id);
+      let isFrontDeskOrManager = isConfigManager;
 
       if (salesRepsService) {
         const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
-        if (!caller || caller.status !== "Active") {
-          return res.status(403).json({ error: "Forbidden: Not an active staff member" });
+        if (caller) {
+          if (caller.fullName) requesterName = caller.fullName;
+          if (caller.role === "Front Desk" || caller.role === "Manager" || caller.status === "Active") {
+            isFrontDeskOrManager = true;
+          }
         }
-        if (caller.fullName) requesterName = caller.fullName;
-        isFrontDeskOrManager = caller.role === "Front Desk" || caller.role === "Manager";
-      } else {
-        isFrontDeskOrManager = true;
       }
 
       if (!isFrontDeskOrManager) {
@@ -53,7 +53,7 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
         });
       }
 
-      const { itemCode, productName, delta, reason } = req.body || {};
+      const { isNewItem, itemCode, productName, productDescription, unitPrice, delta, reason } = req.body || {};
       if (!itemCode && !productName) {
         return res.status(400).json({ error: "Validation Error: Item Code or Product Name is required." });
       }
@@ -62,20 +62,38 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
       }
 
       const adjustment = await inventoryService.createAdjustmentRequest({
-        itemCode: itemCode ? String(itemCode).trim() : undefined as any,
+        isNewItem: Boolean(isNewItem),
+        itemCode: itemCode ? String(itemCode).trim().toUpperCase() : undefined as any,
         productName: productName ? String(productName).trim() : undefined,
+        productDescription: productDescription ? String(productDescription).trim() : undefined,
+        unitPrice: unitPrice !== undefined ? Number(unitPrice) : undefined,
         delta: Number(delta),
-        reason: reason ? String(reason).trim() : "Front Desk Stock Adjustment",
+        reason: reason ? String(reason).trim() : (isNewItem ? "New Inventory Model Proposal" : "Front Desk Stock Adjustment"),
         requestedByTelegramId: telegramUser.id,
         requestedByName: requesterName || "Front Desk Staff",
       });
 
-      // Dispatch detailed alert to managers via Telegram
+      // Dispatch detailed alert to all active managers via Telegram
       let managersNotified = 0;
-      if (bot && managerChatIds.length > 0) {
+      let effectiveManagerIds = managerChatIds;
+      if (salesRepsService && typeof salesRepsService.getActiveManagerChatIds === "function") {
+        try {
+          const timeoutPromise = new Promise<number[]>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 1000)
+          );
+          effectiveManagerIds = await Promise.race([
+            salesRepsService.getActiveManagerChatIds(managerChatIds),
+            timeoutPromise,
+          ]);
+        } catch {
+          effectiveManagerIds = managerChatIds;
+        }
+      }
+
+      if (bot && effectiveManagerIds.length > 0) {
         managersNotified = await sendStockAdjustmentAlertToManagers(
           bot,
-          managerChatIds,
+          effectiveManagerIds,
           adjustment
         );
       }
@@ -93,7 +111,7 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
     }
   });
 
-  // 3. Direct stock adjustment (for Managers)
+  // 3. Direct stock adjustment or item creation (for Managers)
   router.post("/adjust-direct", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const telegramUser = req.telegramUser;
@@ -101,29 +119,33 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      let isManager = false;
+      const isConfigManager = managerChatIds.includes(telegramUser.id);
+      let isManager = isConfigManager;
       let managerName = `${telegramUser.firstName || ""} ${telegramUser.lastName || ""}`.trim();
 
       if (salesRepsService) {
         const caller = await salesRepsService.findSalesRepByTelegramId(telegramUser.id);
-        isManager = caller?.role === "Manager" || caller?.status === "Active" && managerChatIds.includes(telegramUser.id);
+        if (caller?.role === "Manager" || (caller?.status === "Active" && isConfigManager)) {
+          isManager = true;
+        }
         if (caller?.fullName) managerName = caller.fullName;
-      } else {
-        isManager = managerChatIds.includes(telegramUser.id);
       }
 
       if (!isManager) {
         return res.status(403).json({ error: "Forbidden: Only Executive Managers can directly adjust stock." });
       }
 
-      const { itemCode, productName, delta, newQuantity, reason } = req.body || {};
+      const { isNewItem, itemCode, productName, productDescription, unitPrice, delta, newQuantity, reason } = req.body || {};
       if (!itemCode && !productName) {
         return res.status(400).json({ error: "Validation Error: Item Code or Product Name is required." });
       }
 
       const updated = await inventoryService.directAdjustStock({
-        itemCode: itemCode ? String(itemCode).trim() : undefined as any,
+        isNewItem: Boolean(isNewItem),
+        itemCode: itemCode ? String(itemCode).trim().toUpperCase() : undefined as any,
         productName: productName ? String(productName).trim() : undefined,
+        productDescription: productDescription ? String(productDescription).trim() : undefined,
+        unitPrice: unitPrice !== undefined ? Number(unitPrice) : undefined,
         delta: delta !== undefined ? Number(delta) : undefined,
         newQuantity: newQuantity !== undefined ? Number(newQuantity) : undefined,
         reason: reason ? String(reason).trim() : "Direct Manager adjustment",

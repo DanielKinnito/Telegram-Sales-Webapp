@@ -54,6 +54,7 @@ export async function sendStockAdjustmentAlertToManagers(
 ): Promise<number> {
   if (!bot || !managerChatIds || managerChatIds.length === 0) return 0;
 
+  const isNew = Boolean(adjustment.isNewItem);
   const deltaSign = adjustment.delta > 0 ? `+${adjustment.delta}` : `${adjustment.delta}`;
   const priceFormatted =
     adjustment.unitPrice > 0 ? `ETB ${Number(adjustment.unitPrice).toLocaleString()}` : "N/A";
@@ -62,24 +63,35 @@ export async function sendStockAdjustmentAlertToManagers(
     ? `• *Specs / Details:* _${adjustment.productDescription.split('\n')[0]}_\n`
     : "";
 
+  const titleHeader = isNew
+    ? `📦 *NEW INVENTORY ITEM PROPOSAL*\n*Status:* ⏳ Pending Manager Approval\n\n`
+    : `📦 *INVENTORY ADJUSTMENT REQUEST*\n*Status:* ⏳ Pending Manager Approval\n\n`;
+
+  const stockDetails = isNew
+    ? `• *Initial Stock to Add:* *${adjustment.delta} units*\n`
+    : `• *Current Stock:* ${adjustment.currentStock} units\n` +
+      `• *Adjustment:* *${deltaSign} units*\n` +
+      `• *Proposed New Stock:* *${adjustment.newStock} units*\n`;
+
+  const footerPrompt = isNew
+    ? `_Review and approve to add this new equipment model to Notion stock catalog:_`
+    : `_Please review the stock change details above:_`;
+
   const message =
-    `📦 *INVENTORY ADJUSTMENT REQUEST*\n` +
-    `*Status:* ⏳ Pending Manager Approval\n\n` +
+    titleHeader +
     `• *Item Code:* \`${adjustment.itemCode}\`\n` +
     `• *Product Name:* *${adjustment.productName}*\n` +
     descSnippet +
-    `• *Current Stock:* ${adjustment.currentStock} units\n` +
-    `• *Adjustment:* *${deltaSign} units*\n` +
-    `• *Proposed New Stock:* *${adjustment.newStock} units*\n` +
+    stockDetails +
     `• *Catalog Price:* ${priceFormatted}\n` +
     `• *Requested by:* ${adjustment.requestedByName} (Front Desk)\n` +
     `• *Reason / Note:* ${adjustment.reason}\n\n` +
-    `_Please review the stock change details above:_`;
+    footerPrompt;
 
   const keyboard = [
     [
       {
-        text: `✅ Approve (${deltaSign} Units)`,
+        text: isNew ? `✅ Approve & Add Item` : `✅ Approve (${deltaSign} Units)`,
         callback_data: `stock_appr:${adjustment.requestId}`,
       },
       {
@@ -612,37 +624,52 @@ export function createBot(options: CreateBotOptions = {}) {
         return;
       }
 
+      const isNew = Boolean(pending.isNewItem);
       const deltaSign = pending.delta > 0 ? `+${pending.delta}` : `${pending.delta}`;
 
       if (isApprove) {
         await registeredInventoryService.approveAdjustment(requestId, managerName);
-        await ctx.answerCallbackQuery({ text: "✅ Stock adjustment approved!" }).catch(() => {});
+        await ctx.answerCallbackQuery({ text: isNew ? "✅ New item added to catalog!" : "✅ Stock adjustment approved!" }).catch(() => {});
         if (ctx.callbackQuery.message) {
-          await ctx.editMessageText(
-            `✅ *INVENTORY ADJUSTMENT APPROVED*\n\n` +
-            `• *Item Code:* \`${pending.itemCode}\`\n` +
-            `• *Product Name:* ${pending.productName}\n` +
-            `• *Updated Stock:* ${pending.newStock} units (${deltaSign} applied)\n` +
-            `• *Approved by:* Manager ${managerName}\n` +
-            `• *Originally Requested by:* ${pending.requestedByName}\n` +
-            `• *Reason:* ${pending.reason}`,
-            { parse_mode: "Markdown" }
-          ).catch(() => {});
+          const approvedMsg = isNew
+            ? `✅ *NEW INVENTORY ITEM APPROVED & ADDED*\n\n` +
+              `• *Item Code:* \`${pending.itemCode}\`\n` +
+              `• *Product Name:* ${pending.productName}\n` +
+              `• *Catalog Price:* ETB ${Number(pending.unitPrice).toLocaleString()}\n` +
+              `• *Initial Stock:* ${pending.newStock} units\n` +
+              `• *Approved by:* Manager ${managerName}\n` +
+              `• *Originally Requested by:* ${pending.requestedByName}\n` +
+              `• *Status:* Added to Notion Inventory & Stock Catalog`
+            : `✅ *INVENTORY ADJUSTMENT APPROVED*\n\n` +
+              `• *Item Code:* \`${pending.itemCode}\`\n` +
+              `• *Product Name:* ${pending.productName}\n` +
+              `• *Updated Stock:* ${pending.newStock} units (${deltaSign} applied)\n` +
+              `• *Approved by:* Manager ${managerName}\n` +
+              `• *Originally Requested by:* ${pending.requestedByName}\n` +
+              `• *Reason:* ${pending.reason}`;
+
+          await ctx.editMessageText(approvedMsg, { parse_mode: "Markdown" }).catch(() => {});
         }
       } else {
         await registeredInventoryService.rejectAdjustment(requestId, managerName);
-        await ctx.answerCallbackQuery({ text: "❌ Stock adjustment rejected." }).catch(() => {});
+        await ctx.answerCallbackQuery({ text: isNew ? "❌ New item proposal rejected." : "❌ Stock adjustment rejected." }).catch(() => {});
         if (ctx.callbackQuery.message) {
-          await ctx.editMessageText(
-            `❌ *INVENTORY ADJUSTMENT REJECTED*\n\n` +
-            `• *Item Code:* \`${pending.itemCode}\`\n` +
-            `• *Product Name:* ${pending.productName}\n` +
-            `• *Stock Kept at:* ${pending.currentStock} units\n` +
-            `• *Rejected by:* Manager ${managerName}\n` +
-            `• *Originally Requested by:* ${pending.requestedByName}\n` +
-            `• *Reason:* ${pending.reason}`,
-            { parse_mode: "Markdown" }
-          ).catch(() => {});
+          const rejectedMsg = isNew
+            ? `❌ *NEW INVENTORY ITEM PROPOSAL REJECTED*\n\n` +
+              `• *Item Code:* \`${pending.itemCode}\`\n` +
+              `• *Product Name:* ${pending.productName}\n` +
+              `• *Rejected by:* Manager ${managerName}\n` +
+              `• *Originally Requested by:* ${pending.requestedByName}\n` +
+              `• *Reason:* ${pending.reason}`
+            : `❌ *INVENTORY ADJUSTMENT REJECTED*\n\n` +
+              `• *Item Code:* \`${pending.itemCode}\`\n` +
+              `• *Product Name:* ${pending.productName}\n` +
+              `• *Stock Kept at:* ${pending.currentStock} units\n` +
+              `• *Rejected by:* Manager ${managerName}\n` +
+              `• *Originally Requested by:* ${pending.requestedByName}\n` +
+              `• *Reason:* ${pending.reason}`;
+
+          await ctx.editMessageText(rejectedMsg, { parse_mode: "Markdown" }).catch(() => {});
         }
       }
       return;

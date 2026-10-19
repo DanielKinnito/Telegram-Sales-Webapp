@@ -49,7 +49,16 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<TabType>('tin_lookup');
-  const [canSwitchRole, setCanSwitchRole] = useState(false);
+  const [canSwitchRole, setCanSwitchRole] = useState(() => {
+    try {
+      const cached = localStorage.getItem('crm_rep_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.role === 'Manager') return true;
+      }
+    } catch {}
+    return false;
+  });
   const [repRoleName, setRepRoleName] = useState(() => {
     try {
       const cached = localStorage.getItem('crm_rep_profile');

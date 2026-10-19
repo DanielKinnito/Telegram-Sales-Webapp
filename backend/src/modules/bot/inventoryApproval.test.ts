@@ -79,7 +79,7 @@ describe("Bot Inventory Adjustment Approval Handlers", () => {
     );
 
     // Verify rich detail text includes current stock, proposed new stock, requester name, and reason
-    const sentText = mockBotApi.api.sendMessage.mock.calls[0][1];
+    const sentText = mockBotApi.api.sendMessage.mock.calls[0]![1];
     expect(sentText).toContain("Current Stock:* 4 units");
     expect(sentText).toContain("+2 units");
     expect(sentText).toContain("Proposed New Stock:* *6 units*");

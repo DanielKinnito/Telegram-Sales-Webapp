@@ -320,6 +320,9 @@ export const api = {
   requestStockAdjustment: async (data: {
     itemCode: string;
     productName?: string;
+    productDescription?: string;
+    unitPrice?: number;
+    isNewItem?: boolean;
     delta: number;
     reason: string;
   }): Promise<{ success: boolean; adjustment: any; managersNotified: number }> => {
@@ -332,6 +335,9 @@ export const api = {
   directAdjustStock: async (data: {
     itemCode: string;
     productName?: string;
+    productDescription?: string;
+    unitPrice?: number;
+    isNewItem?: boolean;
     delta?: number;
     newQuantity?: number;
     reason?: string;

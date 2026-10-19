@@ -31,6 +31,7 @@ export interface AppOptions {
   dealsService?: DealsService | undefined;
   inventoryService?: InventoryService | undefined;
   storageProvider?: StorageProvider | undefined;
+  bot?: any | undefined;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -68,18 +69,23 @@ export function createApp(options: AppOptions = {}) {
         return res.status(401).json({ success: false, error: "Unauthorized" });
       }
       const rep = await salesRepsService.findSalesRepByTelegramId(req.telegramUser.id);
+      const isConfigManager = parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS).includes(req.telegramUser.id);
+      const isManager = isConfigManager || rep?.role === "Manager";
+
+      const effectiveRole = isManager ? "Manager" : (rep?.role || "Sales Rep");
+      const effectiveStatus = (isManager || rep?.status === "Active") ? "Active" : (rep?.status || "Pending Approval");
+      const effectiveName = rep?.fullName || `${req.telegramUser.firstName || ""} ${req.telegramUser.lastName || ""}`.trim() || (isManager ? "Executive Manager" : "Staff Member");
+
       res.json({
         success: true,
         user: req.telegramUser,
-        rep: rep
-          ? {
-              pageId: rep.pageId,
-              fullName: rep.fullName,
-              role: rep.role,
-              status: rep.status,
-              phone: rep.phone,
-            }
-          : null,
+        rep: {
+          pageId: rep?.pageId || "mgr-active",
+          fullName: effectiveName,
+          role: effectiveRole,
+          status: effectiveStatus,
+          phone: rep?.phone || "",
+        },
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -105,7 +111,7 @@ export function createApp(options: AppOptions = {}) {
       leadsService,
       queueDbId: env.NOTION_QUEUE_DB_ID,
       accountsDbId: env.NOTION_ACCOUNTS_DB_ID,
-      bot: getBot(),
+      bot: options.bot || getBot(),
     });
 
   // Inventory catalog & stock adjustments
@@ -127,7 +133,7 @@ export function createApp(options: AppOptions = {}) {
       salesRepsService,
       dealsDbId: env.NOTION_DEALS_DB_ID,
       managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
-      bot: getBot(),
+      bot: options.bot || getBot(),
       inventoryService,
     });
 
@@ -141,7 +147,7 @@ export function createApp(options: AppOptions = {}) {
     createInventoryRouter({
       inventoryService,
       salesRepsService,
-      bot: getBot(),
+      bot: options.bot || getBot(),
       managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
     })
   );
