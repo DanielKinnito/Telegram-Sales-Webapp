@@ -4,6 +4,8 @@ import { ProformaPdfService, type ProformaInvoiceData } from "../proforma/profor
 import { InputFile } from "grammy";
 import { env } from "../../config/env.js";
 
+import type { LineItem } from "../inventory/inventoryService.js";
+
 export function formatTimeTo12Hour(timeStr: string): string {
   if (!timeStr) return timeStr;
   const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
@@ -36,6 +38,7 @@ export interface DealRecord {
   offerAmount?: number | null;
   lostReason?: string | null;
   repName?: string | null;
+  lineItems?: LineItem[] | null;
 }
 
 export interface ActivityRecord {
@@ -91,6 +94,7 @@ export interface DealsServiceOptions {
   salesLogsDbId?: string | undefined;
   managerChatIds?: number[] | undefined;
   bot?: any | undefined;
+  inventoryService?: any | undefined;
 }
 
 export class DealsService {
@@ -100,6 +104,7 @@ export class DealsService {
   private readonly salesLogsDbId: string;
   private readonly managerChatIds: number[];
   private readonly bot?: any;
+  private readonly inventoryService?: any;
 
   constructor(options: DealsServiceOptions) {
     this.notionClient = options.notionClient;
@@ -108,6 +113,7 @@ export class DealsService {
     this.salesLogsDbId = options.salesLogsDbId || env.NOTION_SALES_LOGS_DB_ID;
     this.managerChatIds = options.managerChatIds || [];
     this.bot = options.bot;
+    this.inventoryService = options.inventoryService;
   }
 
   /**
@@ -319,6 +325,13 @@ export class DealsService {
         props?.["TIN"]?.rich_text?.[0]?.plain_text ||
         props?.["TIN"]?.title?.[0]?.plain_text ||
         null;
+      const lineItemsRaw = props?.["Line Items JSON"]?.rich_text?.[0]?.plain_text || null;
+      let lineItems: any[] | null = null;
+      if (lineItemsRaw) {
+        try {
+          lineItems = JSON.parse(lineItemsRaw);
+        } catch {}
+      }
 
       return {
         pageId: page.id,
@@ -333,6 +346,7 @@ export class DealsService {
         repName,
         companyName,
         tin,
+        lineItems,
       };
     } catch {
       throw new Error(`Deal not found: ${pageId}`);
@@ -380,6 +394,7 @@ export class DealsService {
       totalAmountVatIncl: totalAmount,
       repName: deal.repName || "Sales Representative",
       repPhone,
+      items: deal.lineItems && deal.lineItems.length > 0 ? (deal.lineItems as any) : undefined,
     };
   }
 
@@ -658,6 +673,7 @@ export class DealsService {
       reason?: string | undefined;
       productType?: string | undefined;
       offerAmount?: number | undefined;
+      lineItems?: LineItem[] | undefined;
       updatedByTelegramId?: number | string | undefined;
       updatedByName?: string | undefined;
     }
@@ -714,6 +730,32 @@ export class DealsService {
         number: input.offerAmount,
       };
       dealAmount = input.offerAmount;
+    }
+
+    if (input.lineItems && input.lineItems.length > 0) {
+      updateProps["Line Items JSON"] = {
+        rich_text: [{ text: { content: JSON.stringify(input.lineItems) } }],
+      };
+    }
+
+    // Automatic Inventory Deduction when deal moves to WON
+    if (input.stage === "Won" && this.inventoryService) {
+      let itemsToDeduct = input.lineItems;
+      if (!itemsToDeduct) {
+        const rawJson = targetPage.properties?.["Line Items JSON"]?.rich_text?.[0]?.plain_text;
+        if (rawJson) {
+          try {
+            itemsToDeduct = JSON.parse(rawJson);
+          } catch {}
+        }
+      }
+      if (itemsToDeduct && itemsToDeduct.length > 0) {
+        try {
+          await this.inventoryService.deductStockForDeal(itemsToDeduct);
+        } catch (invErr: any) {
+          console.warn("Could not deduct stock for won deal:", invErr.message);
+        }
+      }
     }
 
     if (isAccountPage) {
@@ -834,6 +876,7 @@ export class DealsService {
     input: {
       productType: string;
       offerAmount: number;
+      lineItems?: LineItem[] | undefined;
       repTelegramId?: number | string | undefined;
       repName?: string | undefined;
       companyName?: string | undefined;
@@ -850,6 +893,7 @@ export class DealsService {
       stage: "Proposal",
       productType: input.productType.trim(),
       offerAmount: input.offerAmount,
+      lineItems: input.lineItems,
       updatedByTelegramId: input.repTelegramId,
       updatedByName: input.repName,
     });

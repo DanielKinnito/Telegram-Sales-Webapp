@@ -171,7 +171,7 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
         }
       }
 
-      const { productType, offerAmount, companyName } = req.body || {};
+      const { productType, offerAmount, companyName, lineItems } = req.body || {};
       if (!productType || typeof productType !== "string" || !productType.trim()) {
         return res.status(400).json({ error: "Validation Error: Equipment Type is required." });
       }
@@ -182,6 +182,7 @@ export function createDealsRouter(options: DealsRouterOptions): Router {
       const updatedDeal = await dealsService.submitProposedOffer(dealId, {
         productType: String(productType).trim(),
         offerAmount: Number(offerAmount),
+        lineItems: Array.isArray(lineItems) ? lineItems : undefined,
         repTelegramId: telegramUser.id,
         repName: submitterName,
         companyName: companyName ? String(companyName).trim() : undefined,

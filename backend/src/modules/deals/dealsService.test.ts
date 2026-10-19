@@ -358,4 +358,97 @@ describe("DealsService (Workflow D: Deal Progression & Payment Proof Links)", ()
       expect(partialMatches[0]!.pageId).toBe("deal_inova_1");
     });
   });
+
+  describe("Multi-Item Quotation & Automatic Inventory Deduction on Won", () => {
+    it("persists Line Items JSON when submitting a multi-item proposed offer", async () => {
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "MK Digital PLC Order" }] },
+          Stage: { select: { name: "New" } },
+        },
+      });
+
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_p1" });
+
+      const lineItems = [
+        {
+          itemNo: 1,
+          itemCode: "YC345GF",
+          productName: "SILENT DIESEL GENERATOR SET YC345GF",
+          productDescription: "Prime Power: 313KVA/250KW",
+          quantity: 1,
+          unitPrice: 1850000,
+          totalPrice: 1850000,
+        },
+        {
+          itemNo: 2,
+          itemCode: "ATS-400A",
+          productName: "ATS (Automatic Transfer Switch)",
+          quantity: 1,
+          unitPrice: 120000,
+          totalPrice: 120000,
+        },
+      ];
+
+      const updated = await service.submitProposedOffer("deal_p1", {
+        productType: "SILENT DIESEL GENERATOR SET YC345GF + ATS",
+        offerAmount: 2265500, // VAT included
+        lineItems,
+      });
+
+      expect(updated.pageId).toBe("deal_p1");
+      expect(mockNotionClient.updatePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_id: "deal_p1",
+          properties: expect.objectContaining({
+            "Line Items JSON": {
+              rich_text: [{ text: { content: JSON.stringify(lineItems) } }],
+            },
+          }),
+        })
+      );
+    });
+
+    it("triggers stock deduction via InventoryService when deal transitions to Won", async () => {
+      const mockInventoryService = {
+        deductStockForDeal: vi.fn().mockResolvedValue({ success: true, deductedItems: [] }),
+      };
+
+      const dealsServiceWithInv = new DealsService({
+        notionClient: mockNotionClient as ResilientNotionClient,
+        dealsDbId: "test_deals_db",
+        inventoryService: mockInventoryService as any,
+      });
+
+      const lineItems = [
+        {
+          itemCode: "YC345GF",
+          productName: "SILENT DIESEL GENERATOR SET YC345GF",
+          quantity: 1,
+          unitPrice: 1850000,
+        },
+      ];
+
+      (mockNotionClient.retrievePage as any).mockResolvedValue({
+        id: "deal_p1",
+        properties: {
+          "Deal Title": { title: [{ plain_text: "MK Digital PLC Order" }] },
+          Stage: { select: { name: "Proposal" } },
+          "Line Items JSON": { rich_text: [{ plain_text: JSON.stringify(lineItems) }] },
+        },
+      });
+
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "deal_p1" });
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "log_won" });
+
+      await dealsServiceWithInv.updateDealStage("deal_p1", {
+        stage: "Won",
+      });
+
+      expect(mockInventoryService.deductStockForDeal).toHaveBeenCalledWith(lineItems);
+    });
+  });
 });
+
