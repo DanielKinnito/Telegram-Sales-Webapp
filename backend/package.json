@@ -11,6 +11,8 @@
     "test:manual": "tsx scripts/run-live-workflow-test.ts",
     "cron:sweep": "tsx scripts/run-cron-sweep.ts",
     "cron:seed": "tsx scripts/run-cron-sweep.ts --seed",
+    "setup:bot": "tsx scripts/setup-telegram-bot.ts",
+    "setup:webhook": "tsx scripts/setup-telegram-bot.ts --set-webhook",
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/server.ts"
   },

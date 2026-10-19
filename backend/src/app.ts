@@ -20,6 +20,7 @@ import { getBot, parseManagerChatIds, setBotDealsService } from "./modules/bot/b
 import type { StorageProvider } from "./services/storage/types.js";
 import { getStorageProvider } from "./services/storage/index.js";
 import { env } from "./config/env.js";
+import { webhookCallback } from "grammy";
 
 export interface AppOptions {
   leadsService?: LeadsService | undefined;
@@ -43,6 +44,15 @@ export function createApp(options: AppOptions = {}) {
       service: "telegram-sales-backend",
     });
   });
+
+  // Telegram Bot Webhook endpoint (Inbound bot commands wake Render from sleep)
+  // timeoutMilliseconds is set to 60_000 to comfortably accommodate Render cold starts
+  app.use(
+    "/api/bot/webhook",
+    env.TELEGRAM_WEBHOOK_SECRET
+      ? webhookCallback(getBot(), "express", "return", 60_000, env.TELEGRAM_WEBHOOK_SECRET)
+      : webhookCallback(getBot(), "express", "return", 60_000)
+  );
 
   const salesRepsService =
     options.salesRepsService ||

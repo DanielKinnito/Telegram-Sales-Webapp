@@ -83,6 +83,25 @@ async function setupBotProfile() {
       console.log("ℹ️  Note: Persistent Menu Button requires a public HTTPS URL (run tunnel first).");
     }
 
+    // 5. Inspect or Configure Webhook Status
+    const webhookInfo = await bot.api.getWebhookInfo();
+    console.log(`\n📡 Telegram Webhook Status:`);
+    console.log(`• Active URL: ${webhookInfo.url || "(None - Polling Mode)"}`);
+    console.log(`• Pending Updates: ${webhookInfo.pending_update_count}`);
+    if (webhookInfo.last_error_message) {
+      console.log(`• Last Error: ${webhookInfo.last_error_message} (${new Date((webhookInfo.last_error_date || 0) * 1000).toISOString()})`);
+    }
+
+    if (process.argv.includes("--set-webhook") && webappUrl.startsWith("https://")) {
+      const cleanUrl = webappUrl.replace(/\/+$/, "");
+      const targetWebhook = `${cleanUrl}/api/bot/webhook`;
+      await bot.api.setWebhook(targetWebhook, { drop_pending_updates: false });
+      console.log(`✅ Webhook registered directly to: ${targetWebhook}`);
+    } else if (process.argv.includes("--delete-webhook")) {
+      await bot.api.deleteWebhook({ drop_pending_updates: false });
+      console.log(`✅ Webhook cleared (reverted to long polling)`);
+    }
+
     console.log("\n🎉 Telegram Bot successfully configured with professional metadata!");
   } catch (err: any) {
     console.error("❌ Failed to configure Telegram Bot:", err.message);

@@ -64,48 +64,84 @@ if (env.NODE_ENV !== "test") {
   });
   reportsService.setBot(bot);
 
-  bot.start({
-    onStart: (info) => {
-      console.log(`🤖 GrammY bot @${info.username} listening for onboarding & notifications`);
-      // 1. Default commands for everyone (sales reps, front desk, pending, guests) - strictly hides /weekly_report
-      bot.api.setMyCommands(DEFAULT_BOT_COMMANDS, { scope: { type: "default" } }).catch((err) => {
-        console.warn("⚠️ Could not update default Telegram bot commands menu:", err.message);
-      });
+  const setupBotCommandsAndMenu = async () => {
+    // 1. Default commands for everyone (sales reps, front desk, pending, guests) - strictly hides /weekly_report
+    await bot.api.setMyCommands(DEFAULT_BOT_COMMANDS, { scope: { type: "default" } }).catch((err) => {
+      console.warn("⚠️ Could not update default Telegram bot commands menu:", err.message);
+    });
 
-      // 2. Scoped manager commands - only visible to authorized Executive Managers
-      salesRepsService
-        .getActiveManagerChatIds(managerChatIds)
-        .then((allManagerIds) => {
-          for (const mgrId of allManagerIds) {
-            bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
-          }
-        })
-        .catch(() => {
-          for (const mgrId of managerChatIds) {
-            bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
-          }
-        });
-
-      // 3. Configure Persistent Menu Button if WEBAPP_URL is present
-      if (env.WEBAPP_URL && env.WEBAPP_URL.startsWith("https://")) {
-        bot.api
-          .setChatMenuButton({
-            menu_button: {
-              type: "web_app",
-              text: "💼 Open CRM",
-              web_app: {
-                url: env.WEBAPP_URL,
-              },
-            },
-          })
-          .catch((err) => {
-            console.warn("⚠️ Could not update Telegram menu button:", err.message);
-          });
+    // 2. Scoped manager commands - only visible to authorized Executive Managers
+    try {
+      const allManagerIds = await salesRepsService.getActiveManagerChatIds(managerChatIds);
+      for (const mgrId of allManagerIds) {
+        await bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
       }
-    },
-  }).catch((err) => {
-    console.error("❌ Failed to launch Telegram bot:", err);
-  });
+    } catch {
+      for (const mgrId of managerChatIds) {
+        await bot.api.setMyCommands(MANAGER_BOT_COMMANDS, { scope: { type: "chat", chat_id: mgrId } }).catch(() => {});
+      }
+    }
+
+    // 3. Configure Persistent Menu Button if WEBAPP_URL is present
+    if (env.WEBAPP_URL && env.WEBAPP_URL.startsWith("https://")) {
+      await bot.api
+        .setChatMenuButton({
+          menu_button: {
+            type: "web_app",
+            text: "💼 Open CRM",
+            web_app: {
+              url: env.WEBAPP_URL,
+            },
+          },
+        })
+        .catch((err) => {
+          console.warn("⚠️ Could not update Telegram menu button:", err.message);
+        });
+    }
+  };
+
+  const isProduction = env.NODE_ENV === "production";
+  const hasHttpsUrl = Boolean(env.WEBAPP_URL && env.WEBAPP_URL.startsWith("https://"));
+  const shouldRunWebhook =
+    env.USE_WEBHOOK === "true" || (env.USE_WEBHOOK === "auto" && isProduction && hasHttpsUrl);
+
+  if (shouldRunWebhook && env.WEBAPP_URL) {
+    const cleanUrl = env.WEBAPP_URL.replace(/\/+$/, "");
+    const webhookUrl = `${cleanUrl}/api/bot/webhook`;
+
+    console.log(`📡 Configuring Telegram Webhook mode for: ${webhookUrl}`);
+    const webhookOptions: { drop_pending_updates: boolean; secret_token?: string } = {
+      drop_pending_updates: false,
+    };
+    if (env.TELEGRAM_WEBHOOK_SECRET) {
+      webhookOptions.secret_token = env.TELEGRAM_WEBHOOK_SECRET;
+    }
+
+    bot.api
+      .setWebhook(webhookUrl, webhookOptions)
+      .then(async () => {
+        console.log(`⚡ Telegram Webhook active! Inbound messages & bot commands will wake Render from sleep.`);
+        await setupBotCommandsAndMenu();
+      })
+      .catch((err) => {
+        console.error("❌ Failed to set Telegram webhook:", err.message);
+      });
+  } else {
+    // Long Polling Mode (Local dev or when no public HTTPS URL is set)
+    bot.api
+      .deleteWebhook({ drop_pending_updates: false })
+      .catch(() => {})
+      .then(() => {
+        bot.start({
+          onStart: async (info) => {
+            console.log(`🤖 GrammY bot @${info.username} listening in long polling mode`);
+            await setupBotCommandsAndMenu();
+          },
+        }).catch((err) => {
+          console.error("❌ Failed to launch Telegram bot in polling mode:", err);
+        });
+      });
+  }
 
   // Launch Cron Workers
   const cronService = new CronService({

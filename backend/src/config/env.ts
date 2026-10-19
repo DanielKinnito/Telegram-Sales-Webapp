@@ -28,6 +28,8 @@ export const envSchema = z.object({
   SUPABASE_BUCKET_NAME: z.string().default("payment-proofs"),
   VERIFY_ET_API_KEY: z.string().optional(),
   WEBAPP_URL: z.string().optional(),
+  USE_WEBHOOK: z.enum(["true", "false", "auto"]).default("auto"),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
