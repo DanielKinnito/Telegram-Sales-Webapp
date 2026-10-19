@@ -115,7 +115,7 @@ export class WeeklyReportPdfService {
         doc.text("YC Electric Equipment Manufacturing PLC.", textLeft, headerTop);
 
         doc.fillColor("#0056b3").fontSize(8.5).font("Helvetica-Bold");
-        doc.text("玉柴船电动力 | YUCHAI MARINE & GENSET POWER", textLeft, headerTop + 15);
+        doc.text("YUCHAI MARINE & GENSET POWER", textLeft, headerTop + 15);
 
         doc.fillColor("#4b5563").fontSize(7.5).font("Helvetica");
         doc.text(
@@ -137,22 +137,32 @@ export class WeeklyReportPdfService {
 
         // --- 2. REPORT TITLE & AUDIT METADATA CARD ---
         const metaTop = dividerY + 10;
+        const metaHeight = 44;
         doc.save();
-        doc.rect(leftMargin, metaTop, contentWidth, 38).fill("#f8fafc");
-        doc.rect(leftMargin, metaTop, contentWidth, 38).lineWidth(0.8).stroke("#e2e8f0");
+        doc.rect(leftMargin, metaTop, contentWidth, metaHeight).fill("#f8fafc");
+        doc.rect(leftMargin, metaTop, contentWidth, metaHeight).lineWidth(0.8).stroke("#e2e8f0");
 
+        // Row 1: Document Title (Left) and Audit Badge (Right)
         doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold");
         doc.text("WEEKLY EXECUTIVE SALES PERFORMANCE REPORT", leftMargin + 10, metaTop + 8);
 
+        doc.fillColor("#0284c7").fontSize(7.5).font("Helvetica-Bold");
+        doc.text("CLASSIFICATION: EXECUTIVE AUDIT", leftMargin + 10, metaTop + 9, {
+          width: contentWidth - 20,
+          align: "right",
+        });
+
+        // Row 2: Reporting Period (Left) and Publication Date (Right)
         doc.fillColor("#64748b").fontSize(7.5).font("Helvetica");
-        doc.text(`Reporting Period: ${data.periodString}`, leftMargin + 10, metaTop + 22);
-        doc.text(`Publication Date: ${data.publicationDate}`, leftMargin + 250, metaTop + 22);
-        doc.fillColor("#0284c7").font("Helvetica-Bold");
-        doc.text("CLASSIFICATION: EXECUTIVE AUDIT", leftMargin + contentWidth - 160, metaTop + 22);
+        doc.text(`Reporting Period: ${data.periodString}`, leftMargin + 10, metaTop + 25);
+        doc.text(`Publication Date: ${data.publicationDate}`, leftMargin + 10, metaTop + 25, {
+          width: contentWidth - 20,
+          align: "right",
+        });
         doc.restore();
 
         // --- 3. EXECUTIVE KPI CARDS (4 COLUMNS) ---
-        const kpiTop = metaTop + 46;
+        const kpiTop = metaTop + metaHeight + 10;
         const cardWidth = (contentWidth - 18) / 4; // 4 cards with 6px gap
         const cardHeight = 44;
 
@@ -204,7 +214,7 @@ export class WeeklyReportPdfService {
         let currentY = kpiTop + cardHeight + 16;
 
         const checkPageBreak = (neededHeight: number) => {
-          if (currentY + neededHeight > 780) {
+          if (currentY + neededHeight > 770) {
             doc.addPage();
             currentY = 36;
           }
@@ -227,17 +237,18 @@ export class WeeklyReportPdfService {
           checkPageBreak(18);
           doc.fillColor("#64748b").fontSize(8).font("Helvetica-Oblique");
           doc.text("No contracts reached finalized closing stage during this reporting window.", leftMargin + 8, currentY);
-          currentY += 16;
+          currentY = doc.y + 10;
         } else {
           for (const deal of data.wonDeals) {
-            checkPageBreak(18);
+            checkPageBreak(22);
             doc.fillColor("#16a34a").fontSize(8).font("Helvetica-Bold");
             doc.text("•  ", leftMargin + 4, currentY, { continued: true });
             doc.fillColor("#0f172a").text(`${deal.title}: `, { continued: true });
             doc.fillColor("#334155").font("Helvetica").text(
-              `Contract Value: ETB ${deal.amount.toLocaleString()} | Equipment: ${deal.product} | Representative: ${deal.rep}`
+              `Contract Value: ETB ${deal.amount.toLocaleString()} | Equipment: ${deal.product} | Representative: ${deal.rep}`,
+              { width: contentWidth - 12 }
             );
-            currentY += 15;
+            currentY = Math.max(doc.y + 4, currentY + 15);
           }
         }
         currentY += 8;
@@ -249,17 +260,18 @@ export class WeeklyReportPdfService {
           checkPageBreak(18);
           doc.fillColor("#64748b").fontSize(8).font("Helvetica-Oblique");
           doc.text("Zero commercial contract losses recorded during this reporting cycle.", leftMargin + 8, currentY);
-          currentY += 16;
+          currentY = doc.y + 10;
         } else {
           for (const deal of data.lostDeals) {
-            checkPageBreak(18);
+            checkPageBreak(22);
             doc.fillColor("#dc2626").fontSize(8).font("Helvetica-Bold");
             doc.text("•  ", leftMargin + 4, currentY, { continued: true });
             doc.fillColor("#0f172a").text(`${deal.title}: `, { continued: true });
             doc.fillColor("#334155").font("Helvetica").text(
-              `Documented Reason: "${deal.reason}" | Representative: ${deal.rep}`
+              `Documented Reason: "${deal.reason}" | Representative: ${deal.rep}`,
+              { width: contentWidth - 12 }
             );
-            currentY += 15;
+            currentY = Math.max(doc.y + 4, currentY + 15);
           }
         }
         currentY += 8;
@@ -271,62 +283,78 @@ export class WeeklyReportPdfService {
           checkPageBreak(18);
           doc.fillColor("#64748b").fontSize(8).font("Helvetica-Oblique");
           doc.text("No representative performance profiles available.", leftMargin + 8, currentY);
-          currentY += 16;
+          currentY = doc.y + 10;
         } else {
           for (const rep of data.repPerformance) {
-            checkPageBreak(24);
+            checkPageBreak(28);
+
             // Rep Summary Header Line
+            const repHeaderPrefix = `${rep.repName} (${rep.role}):`;
+            const repHeaderSummary = `  Won: ${rep.wonCount} (ETB ${rep.wonRevenue.toLocaleString()}) | Lost: ${rep.lostCount} | Pipeline: ${rep.pipelineCount} deals | Consultations: ${rep.logsCount}`;
+
+            doc.fontSize(8.5).font("Helvetica-Bold");
+            const headerTextHeight = doc.heightOfString(`${repHeaderPrefix} ${repHeaderSummary}`, {
+              width: contentWidth - 12,
+            });
+            const bannerHeight = Math.max(16, headerTextHeight + 6);
+
             doc.save();
-            doc.rect(leftMargin, currentY - 2, contentWidth, 16).fill("#f1f5f9");
+            doc.rect(leftMargin, currentY - 2, contentWidth, bannerHeight).fill("#f1f5f9");
             doc.fillColor("#0f172a").fontSize(8.5).font("Helvetica-Bold");
-            doc.text(`${rep.repName} (${rep.role}):`, leftMargin + 6, currentY + 1, { continued: true });
-            doc.fillColor("#334155").font("Helvetica").text(
-              `  Won: ${rep.wonCount} (ETB ${rep.wonRevenue.toLocaleString()}) | Lost: ${rep.lostCount} | Pipeline: ${rep.pipelineCount} deals | Consultations: ${rep.logsCount}`
-            );
+            doc.text(repHeaderPrefix, leftMargin + 6, currentY + 1, { continued: true });
+            doc.fillColor("#334155").font("Helvetica").text(repHeaderSummary, {
+              width: contentWidth - 12,
+            });
             doc.restore();
-            currentY += 18;
+            currentY = Math.max(doc.y + 4, currentY + bannerHeight + 2);
 
             // Indented Detail Sub-bullets
             for (const w of rep.wonDeals) {
-              checkPageBreak(14);
+              checkPageBreak(16);
               doc.fillColor("#16a34a").fontSize(7.5).font("Helvetica-Bold");
               doc.text("   – Won: ", leftMargin + 12, currentY, { continued: true });
               doc.fillColor("#0f172a").font("Helvetica-Bold").text(`${w.title}`, { continued: true });
               doc.fillColor("#475569").font("Helvetica").text(
-                ` — ETB ${w.amount.toLocaleString()} | ${w.product}`
+                ` — ETB ${w.amount.toLocaleString()} | ${w.product}`,
+                { width: contentWidth - 20 }
               );
-              currentY += 13;
+              currentY = Math.max(doc.y + 2, currentY + 13);
             }
 
             for (const l of rep.lostDeals) {
-              checkPageBreak(14);
+              checkPageBreak(16);
               doc.fillColor("#dc2626").fontSize(7.5).font("Helvetica-Bold");
               doc.text("   – Lost: ", leftMargin + 12, currentY, { continued: true });
               doc.fillColor("#0f172a").font("Helvetica-Bold").text(`${l.title}`, { continued: true });
-              doc.fillColor("#475569").font("Helvetica").text(` — Reason: "${l.reason}"`);
-              currentY += 13;
+              doc.fillColor("#475569").font("Helvetica").text(
+                ` — Reason: "${l.reason}"`,
+                { width: contentWidth - 20 }
+              );
+              currentY = Math.max(doc.y + 2, currentY + 13);
             }
 
             for (const p of rep.pipelineDeals) {
-              checkPageBreak(14);
+              checkPageBreak(16);
               doc.fillColor("#7c3aed").fontSize(7.5).font("Helvetica-Bold");
               doc.text("   – Pipeline: ", leftMargin + 12, currentY, { continued: true });
               doc.fillColor("#0f172a").font("Helvetica-Bold").text(`${p.title}`, { continued: true });
               doc.fillColor("#475569").font("Helvetica").text(
-                ` — Stage: ${p.stage}${p.amount ? ` (Est. ETB ${p.amount.toLocaleString()})` : ""}`
+                ` — Stage: ${p.stage}${p.amount ? ` (Est. ETB ${p.amount.toLocaleString()})` : ""}`,
+                { width: contentWidth - 20 }
               );
-              currentY += 13;
+              currentY = Math.max(doc.y + 2, currentY + 13);
             }
 
             if (rep.logsCount > 0) {
-              checkPageBreak(14);
+              checkPageBreak(16);
               const comps = rep.consultedCompanies.length > 0 ? ` (${rep.consultedCompanies.join(", ")})` : "";
               doc.fillColor("#0284c7").fontSize(7.5).font("Helvetica-Bold");
               doc.text("   – Consultations: ", leftMargin + 12, currentY, { continued: true });
               doc.fillColor("#475569").font("Helvetica").text(
-                `${rep.logsCount} client interaction${rep.logsCount === 1 ? "" : "s"} logged${comps}`
+                `${rep.logsCount} client interaction${rep.logsCount === 1 ? "" : "s"} logged${comps}`,
+                { width: contentWidth - 20 }
               );
-              currentY += 13;
+              currentY = Math.max(doc.y + 2, currentY + 13);
             }
 
             currentY += 4;
@@ -341,19 +369,20 @@ export class WeeklyReportPdfService {
           checkPageBreak(18);
           doc.fillColor("#64748b").fontSize(8).font("Helvetica-Oblique");
           doc.text("All active deals have transitioned out of negotiation stage.", leftMargin + 8, currentY);
-          currentY += 16;
+          currentY = doc.y + 10;
         } else {
           for (const deal of data.pipelineDeals.slice(0, 8)) {
-            checkPageBreak(18);
+            checkPageBreak(22);
             doc.fillColor("#7c3aed").fontSize(8).font("Helvetica-Bold");
             doc.text("•  ", leftMargin + 4, currentY, { continued: true });
             doc.fillColor("#0f172a").text(`${deal.title}: `, { continued: true });
             doc.fillColor("#334155").font("Helvetica").text(
               `Current Stage: ${deal.stage}${
                 deal.amount ? ` | Estimated Value: ETB ${deal.amount.toLocaleString()}` : ""
-              } | Lead Representative: ${deal.rep}`
+              } | Lead Representative: ${deal.rep}`,
+              { width: contentWidth - 12 }
             );
-            currentY += 15;
+            currentY = Math.max(doc.y + 4, currentY + 15);
           }
         }
 
