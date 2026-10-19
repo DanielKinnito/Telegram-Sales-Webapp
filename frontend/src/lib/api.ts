@@ -60,6 +60,26 @@ export interface AssignWalkInResponse {
   notificationSent: boolean;
 }
 
+export interface LineItem {
+  itemNo?: number;
+  itemCode?: string;
+  productName: string;
+  productDescription?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice?: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  itemCode: string;
+  productName: string;
+  productDescription: string;
+  unitPrice: number;
+  quantityInStock: number;
+  status: 'In Stock' | 'Low Stock' | 'Out of Stock';
+}
+
 export interface DealItem {
   pageId: string;
   title: string;
@@ -79,6 +99,7 @@ export interface DealItem {
   productType?: string | null;
   offerAmount?: number | null;
   lostReason?: string | null;
+  lineItems?: LineItem[] | null;
 }
 
 export interface ActivityItem {
@@ -205,6 +226,7 @@ export const api = {
       productType: string;
       offerAmount: number;
       companyName?: string;
+      lineItems?: LineItem[];
     }
   ): Promise<{ success: boolean; deal: DealItem }> => {
     return request<{ success: boolean; deal: DealItem }>(`/api/deals/${dealId}/proposed-offer`, {
@@ -288,6 +310,36 @@ export const api = {
     }
 
     return { sentToTelegram: true };
+  },
+
+  // 6. Inventory Catalog & Stock Adjustments
+  getCatalog: async (): Promise<{ success: boolean; catalog: InventoryItem[] }> => {
+    return request<{ success: boolean; catalog: InventoryItem[] }>('/api/inventory');
+  },
+
+  requestStockAdjustment: async (data: {
+    itemCode: string;
+    productName?: string;
+    delta: number;
+    reason: string;
+  }): Promise<{ success: boolean; adjustment: any; managersNotified: number }> => {
+    return request<{ success: boolean; adjustment: any; managersNotified: number }>('/api/inventory/adjust-request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  directAdjustStock: async (data: {
+    itemCode: string;
+    productName?: string;
+    delta?: number;
+    newQuantity?: number;
+    reason?: string;
+  }): Promise<{ success: boolean; item: InventoryItem }> => {
+    return request<{ success: boolean; item: InventoryItem }>('/api/inventory/adjust-direct', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };
 

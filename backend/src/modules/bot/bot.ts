@@ -58,16 +58,21 @@ export async function sendStockAdjustmentAlertToManagers(
   const priceFormatted =
     adjustment.unitPrice > 0 ? `ETB ${Number(adjustment.unitPrice).toLocaleString()}` : "N/A";
 
+  const descSnippet = adjustment.productDescription
+    ? `• *Specs / Details:* _${adjustment.productDescription.split('\n')[0]}_\n`
+    : "";
+
   const message =
     `📦 *INVENTORY ADJUSTMENT REQUEST*\n` +
     `*Status:* ⏳ Pending Manager Approval\n\n` +
     `• *Item Code:* \`${adjustment.itemCode}\`\n` +
-    `• *Product Name:* ${adjustment.productName}\n` +
+    `• *Product Name:* *${adjustment.productName}*\n` +
+    descSnippet +
     `• *Current Stock:* ${adjustment.currentStock} units\n` +
-    `• *Adjustment:* ${deltaSign} units\n` +
-    `• *Proposed New Stock:* ${adjustment.newStock} units\n` +
+    `• *Adjustment:* *${deltaSign} units*\n` +
+    `• *Proposed New Stock:* *${adjustment.newStock} units*\n` +
     `• *Catalog Price:* ${priceFormatted}\n` +
-    `• *Requested by:* ${adjustment.requestedByName}\n` +
+    `• *Requested by:* ${adjustment.requestedByName} (Front Desk)\n` +
     `• *Reason / Note:* ${adjustment.reason}\n\n` +
     `_Please review the stock change details above:_`;
 

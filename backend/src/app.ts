@@ -13,10 +13,12 @@ import { QueueService } from "./modules/queue/queueService.js";
 import { createQueueRouter } from "./modules/queue/queueRoutes.js";
 import { DealsService } from "./modules/deals/dealsService.js";
 import { createDealsRouter } from "./modules/deals/dealsRoutes.js";
+import { InventoryService } from "./modules/inventory/inventoryService.js";
+import { createInventoryRouter } from "./modules/inventory/inventoryRoutes.js";
 import { getNotionClient } from "./modules/notion/notionClient.js";
 import { SalesRepsService } from "./modules/notion/salesRepsService.js";
 import { getTinCache } from "./modules/leads/tinCache.js";
-import { getBot, parseManagerChatIds, setBotDealsService } from "./modules/bot/bot.js";
+import { getBot, parseManagerChatIds, setBotDealsService, setBotInventoryService } from "./modules/bot/bot.js";
 import type { StorageProvider } from "./services/storage/types.js";
 import { getStorageProvider } from "./services/storage/index.js";
 import { env } from "./config/env.js";
@@ -27,6 +29,7 @@ export interface AppOptions {
   queueService?: QueueService | undefined;
   salesRepsService?: SalesRepsService | undefined;
   dealsService?: DealsService | undefined;
+  inventoryService?: InventoryService | undefined;
   storageProvider?: StorageProvider | undefined;
 }
 
@@ -105,6 +108,17 @@ export function createApp(options: AppOptions = {}) {
       bot: getBot(),
     });
 
+  // Inventory catalog & stock adjustments
+  const inventoryService =
+    options.inventoryService ||
+    new InventoryService({
+      notionClient: getNotionClient(),
+      inventoryDbId: env.NOTION_INVENTORY_DB_ID,
+      salesLogsDbId: env.NOTION_SALES_LOGS_DB_ID,
+    });
+
+  setBotInventoryService(inventoryService);
+
   // Deals progression & payment proofs
   const dealsService =
     options.dealsService ||
@@ -114,6 +128,7 @@ export function createApp(options: AppOptions = {}) {
       dealsDbId: env.NOTION_DEALS_DB_ID,
       managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
       bot: getBot(),
+      inventoryService,
     });
 
   setBotDealsService(dealsService);
@@ -121,6 +136,15 @@ export function createApp(options: AppOptions = {}) {
   app.use("/api/leads", createLeadsRouter(leadsService));
   app.use("/api/queue", createQueueRouter({ queueService, salesRepsService }));
   app.use("/api/deals", createDealsRouter({ dealsService, salesRepsService }));
+  app.use(
+    "/api/inventory",
+    createInventoryRouter({
+      inventoryService,
+      salesRepsService,
+      bot: getBot(),
+      managerChatIds: parseManagerChatIds(env.TELEGRAM_MANAGER_CHAT_IDS),
+    })
+  );
 
   // Static assets (logos, corporate branding, icons)
   const assetsPaths = [

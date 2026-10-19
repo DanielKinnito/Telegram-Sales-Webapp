@@ -36,6 +36,7 @@ export interface PendingStockAdjustment {
   itemId: string;
   itemCode: string;
   productName: string;
+  productDescription?: string;
   currentStock: number;
   delta: number;
   newStock: number;
@@ -259,6 +260,7 @@ export class InventoryService {
       itemId,
       itemCode,
       productName,
+      productDescription: item ? item.productDescription : undefined,
       currentStock,
       delta,
       newStock,

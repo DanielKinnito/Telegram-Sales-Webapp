@@ -301,7 +301,9 @@ export function App() {
           <>
             {activeTab === 'tin_lookup' && <TinLookupView />}
             {activeTab === 'deals' && <DealsView />}
-            {activeTab === 'walk_in' && activeRole === 'front_desk' && <FrontDeskView />}
+            {activeTab === 'walk_in' && (activeRole === 'front_desk' || canSwitchRole) && (
+              <FrontDeskView activeRole={canSwitchRole ? 'manager' : activeRole} />
+            )}
           </>
         )}
       </main>
