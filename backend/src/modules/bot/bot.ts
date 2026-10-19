@@ -170,16 +170,25 @@ export function createBot(options: CreateBotOptions = {}) {
     await ctx.reply("Compiling Weekly Executive Sales Performance Report from Notion CRM datastore...");
     try {
       const res = await activeReportsService.generateWeeklyReport({ triggerSource: "bot" });
-      await ctx.reply(
-        `Weekly Executive Sales Performance Report Compiled\n\n` +
-        `• Period: ${res.periodString}\n` +
-        `• Closed Won Revenue: ETB ${res.totalWonRevenue.toLocaleString()}\n` +
-        `• Contracts Won: ${res.dealsWonCount} | Losses: ${res.dealsLostCount}\n` +
-        `• Active Negotiations: ${res.activePipelineCount}\n` +
-        `• Total Enterprise Accounts: ${res.newAccountsCount}\n\n` +
-        `Notion Document Link:\n${res.reportUrl}\n\n` +
-        `To download as PDF: Open the document in Notion, click '...' in the upper-right corner, and select 'Export' -> 'PDF'.`
-      );
+      const safePeriod = res.periodString.replace(/[^a-zA-Z0-9]/g, "_");
+      const summaryText =
+        `*Weekly Executive Sales Performance Report Compiled*\n\n` +
+        `• *Period:* ${res.periodString}\n` +
+        `• *Closed Won Revenue:* ETB ${res.totalWonRevenue.toLocaleString()}\n` +
+        `• *Contracts Won:* ${res.dealsWonCount} | *Losses:* ${res.dealsLostCount}\n` +
+        `• *Active Negotiations:* ${res.activePipelineCount}\n` +
+        `• *Total Enterprise Accounts:* ${res.newAccountsCount}\n\n` +
+        `📄 [Open Relational Audit in Notion](${res.reportUrl})\n` +
+        `_Pixel-perfect executive PDF document attached above._`;
+
+      if (res.pdfBuffer) {
+        await ctx.replyWithDocument(
+          new InputFile(res.pdfBuffer, `Weekly_Sales_Report_${safePeriod}.pdf`),
+          { caption: summaryText, parse_mode: "Markdown" }
+        );
+      } else {
+        await ctx.reply(summaryText, { parse_mode: "Markdown" });
+      }
     } catch (err: any) {
       await ctx.reply(`Failed to compile executive report: ${err.message}`);
     }

@@ -22,6 +22,7 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
     mockBot = {
       api: {
         sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
+        sendDocument: vi.fn().mockResolvedValue({ message_id: 999 }),
       },
     };
 
@@ -143,26 +144,15 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
     expect(findTextContent(createPageCall.children, "YC ELECTRIC EQUIPMENT MANUFACTURING PLC")).toBe(true);
     expect(findTextContent(createPageCall.children, "Nifasselk Lafto, Addis Ababa, Ethiopia")).toBe(true);
 
-    // Verify brand logo image block
-    const findImageBlock = (blocks: any[]): any => {
-      for (const b of blocks) {
-        if (b.type === "image") return b;
-        if (b.type === "column_list" && b.column_list?.children) {
-          for (const col of b.column_list.children) {
-            const img = findImageBlock(col.column?.children || []);
-            if (img) return img;
-          }
-        }
-      }
-      return null;
-    };
-
-    const imageBlock = findImageBlock(createPageCall.children);
-    if (imageBlock) {
-      expect(imageBlock.image.external.url).toContain("assets/company_logo.png");
+    // Verify Notion page cover and icon
+    if (createPageCall.cover) {
+      expect(createPageCall.cover.external.url).toContain("assets/company_logo.png");
+    }
+    if (createPageCall.icon) {
+      expect(createPageCall.icon.external.url).toContain("assets/company_logo.png");
     }
 
-    // Verify detailed rep performance matrix items
+    // Verify detailed rep performance matrix items in Notion
     const firaolItem = createPageCall.children.find(
       (c: any) =>
         c.type === "bulleted_list_item" &&
@@ -187,11 +177,18 @@ describe("ReportsService (Weekly Executive Friday Reports)", () => {
       "Bishoftu Farm Generator"
     );
 
-    // Verify Telegram alert dispatch to Manager
-    expect(mockBot.api.sendMessage).toHaveBeenCalledWith(
+    // Verify generated executive PDF buffer
+    expect(result.pdfBuffer).toBeInstanceOf(Buffer);
+    expect(result.pdfBuffer?.subarray(0, 4).toString()).toBe("%PDF");
+
+    // Verify Telegram alert with PDF attachment dispatch to Manager
+    expect(mockBot.api.sendDocument).toHaveBeenCalledWith(
       12345,
-      expect.stringContaining("Weekly Executive Sales Report Published"),
-      expect.objectContaining({ parse_mode: "Markdown" })
+      expect.anything(),
+      expect.objectContaining({
+        caption: expect.stringContaining("Weekly Executive Sales Report Published"),
+        parse_mode: "Markdown",
+      })
     );
   });
 });

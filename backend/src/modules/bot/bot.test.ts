@@ -96,6 +96,82 @@ describe("GrammY Bot Module", () => {
     expect(sentMessages[1]).toContain("https://notion.so/mock_report");
   });
 
+  it("handles /weekly_report command sending attached PDF document when pdfBuffer is generated", async () => {
+    const mockNotionClient: Partial<ResilientNotionClient> = {
+      queryDatabase: vi.fn(),
+      createPage: vi.fn(),
+      updatePage: vi.fn(),
+    };
+    const salesRepsService = new SalesRepsService(mockNotionClient as ResilientNotionClient, "test_db");
+
+    const { setBotReportsService } = await import("./bot.js");
+    const mockPdfBuffer = Buffer.from("%PDF-1.4 Mock Weekly Report");
+    const mockReportsService = {
+      generateWeeklyReport: vi.fn().mockResolvedValue({
+        reportPageId: "mock_page_id",
+        reportUrl: "https://notion.so/mock_report",
+        reportTitle: "Weekly Sales Report",
+        periodString: "October 12 – October 19, 2026",
+        totalWonRevenue: 38000000,
+        dealsWonCount: 2,
+        dealsLostCount: 1,
+        activePipelineCount: 0,
+        newAccountsCount: 5,
+        managersNotified: 1,
+        pdfBuffer: mockPdfBuffer,
+      }),
+    };
+    setBotReportsService(mockReportsService as any);
+
+    const bot = createBot({
+      token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ",
+      salesRepsService,
+      managerChatIds: [999001],
+    });
+
+    const mockBotInfo: any = {
+      id: 123456789,
+      is_bot: true,
+      first_name: "TestBot",
+      username: "test_sales_bot",
+      can_join_groups: true,
+      can_read_all_group_messages: false,
+      supports_inline_queries: false,
+      can_connect_to_business: false,
+      has_main_web_app: false,
+    };
+    bot.botInfo = mockBotInfo;
+
+    const sentDocs: any[] = [];
+    bot.api.config.use(async (prev, method, payload: any) => {
+      if (method === "sendDocument") {
+        sentDocs.push(payload);
+        return { ok: true, result: { message_id: 124, chat: { id: payload.chat_id } } } as any;
+      }
+      if (method === "sendMessage") {
+        return { ok: true, result: { message_id: 123, chat: { id: payload.chat_id } } } as any;
+      }
+      return prev(method, payload);
+    });
+
+    await bot.handleUpdate({
+      update_id: 1002,
+      message: {
+        message_id: 56,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 999001, type: "private" } as any,
+        from: { id: 999001, is_bot: false, first_name: "Manager" },
+        text: "/report",
+        entities: [{ offset: 0, length: 7, type: "bot_command" }],
+      },
+    });
+
+    expect(mockReportsService.generateWeeklyReport).toHaveBeenCalledWith({ triggerSource: "bot" });
+    expect(sentDocs.length).toBe(1);
+    expect(sentDocs[0].caption).toContain("Weekly Executive Sales Performance Report Compiled");
+    expect(sentDocs[0].caption).toContain("38,000,000");
+  });
+
   it("strictly rejects /weekly_report command from non-manager users", async () => {
     const mockNotionClient: Partial<ResilientNotionClient> = {
       queryDatabase: vi.fn(),

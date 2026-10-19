@@ -1,6 +1,8 @@
+import { InputFile } from "grammy";
 import type { ResilientNotionClient } from "../notion/notionClient.js";
 import type { SalesRepsService } from "../notion/salesRepsService.js";
 import { env } from "../../config/env.js";
+import { WeeklyReportPdfService } from "./weeklyReportPdfService.js";
 
 export interface GenerateReportOptions {
   periodStart?: Date | undefined;
@@ -19,6 +21,7 @@ export interface WeeklyReportResult {
   activePipelineCount: number;
   newAccountsCount: number;
   managersNotified: number;
+  pdfBuffer?: Buffer | undefined;
 }
 
 export interface ReportsServiceOptions {
@@ -256,110 +259,39 @@ export class ReportsService {
 
     const logoUrl = env.WEBAPP_URL ? `${env.WEBAPP_URL.replace(/\/$/, "")}/assets/company_logo.png` : undefined;
 
-    // 5. Construct Formal Professional Notion Document Blocks (NO emojis, NO AI fluff)
+    // 5. Construct Formal Professional Notion Document Blocks (Pure text letterhead, clean & resilient)
     const pageBlocks: any[] = [
-      // Formal Institutional Corporate Letterhead (Side-by-side Logo and Company Details)
-      ...(logoUrl
-        ? [
+      // Formal Institutional Corporate Letterhead Header
+      {
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
             {
-              type: "column_list",
-              column_list: {
-                children: [
-                  {
-                    type: "column",
-                    column: {
-                      children: [
-                        {
-                          type: "image",
-                          image: {
-                            type: "external",
-                            external: {
-                              url: logoUrl,
-                            },
-                          },
-                        },
-                      ],
-                    },
-                  },
-                  {
-                    type: "column",
-                    column: {
-                      children: [
-                        {
-                          type: "paragraph",
-                          paragraph: {
-                            rich_text: [
-                              {
-                                type: "text",
-                                text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC\n" },
-                                annotations: { bold: true },
-                              },
-                              {
-                                type: "text",
-                                text: { content: "玉柴船电动力 | YUCHAI MARINE & GENSET POWER\n" },
-                                annotations: { bold: true, color: "blue" },
-                              },
-                              {
-                                type: "text",
-                                text: {
-                                  content:
-                                    "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com\n" +
-                                    "Tel: +251900640028 / +251929296636\n",
-                                },
-                                annotations: { bold: false, color: "gray" },
-                              },
-                              {
-                                type: "text",
-                                text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES REPORT\n" },
-                                annotations: { bold: true, color: "blue" },
-                              },
-                              {
-                                type: "text",
-                                text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
-                                annotations: { italic: true, color: "gray" },
-                              },
-                            ],
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
+              type: "text",
+              text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC (玉柴船电动力)\n" },
+              annotations: { bold: true },
             },
-          ]
-        : [
             {
-              type: "paragraph",
-              paragraph: {
-                rich_text: [
-                  {
-                    type: "text",
-                    text: { content: "YC ELECTRIC EQUIPMENT MANUFACTURING PLC (玉柴船电动力)\n" },
-                    annotations: { bold: true },
-                  },
-                  {
-                    type: "text",
-                    text: {
-                      content:
-                        "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com | Tel: +251900640028 / +251929296636\n",
-                    },
-                    annotations: { bold: false, color: "gray" },
-                  },
-                  {
-                    type: "text",
-                    text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES PERFORMANCE REPORT\n" },
-                    annotations: { bold: true, color: "blue" },
-                  },
-                  {
-                    type: "text",
-                    text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
-                    annotations: { italic: true, color: "gray" },
-                  },
-                ],
+              type: "text",
+              text: {
+                content:
+                  "Add: Nifasselk Lafto, Addis Ababa, Ethiopia | Email: Ycelectric24@gmail.com | Tel: +251900640028 / +251929296636\n",
               },
+              annotations: { bold: false, color: "gray" },
             },
-          ]),
+            {
+              type: "text",
+              text: { content: "COMMERCIAL OPERATIONS DIVISION — WEEKLY SALES PERFORMANCE REPORT\n" },
+              annotations: { bold: true, color: "blue" },
+            },
+            {
+              type: "text",
+              text: { content: "CONFIDENTIAL — FOR EXECUTIVE MANAGEMENT REVIEW" },
+              annotations: { italic: true, color: "gray" },
+            },
+          ],
+        },
+      },
       { type: "divider", divider: {} },
 
       // Audit Metadata Table
@@ -904,6 +836,12 @@ export class ReportsService {
           url: logoUrl,
         },
       };
+      pageParams.cover = {
+        type: "external",
+        external: {
+          url: logoUrl,
+        },
+      };
     }
 
     const newPage: any = await this.notionClient.createPage(pageParams);
@@ -911,13 +849,56 @@ export class ReportsService {
     const reportPageId = newPage.id;
     const reportUrl = `https://www.notion.so/${reportPageId.replace(/-/g, "")}`;
 
-    // 7. Dispatch Telegram Notification to Managers
+    // 7. Generate Pixel-Perfect Executive PDF via PDFKit
+    let pdfBuffer: Buffer | undefined;
+    try {
+      const repPerformanceForPdf = Array.from(repPerformanceMap.entries()).map(([repName, p]) => {
+        const repObj = reps.find((r) => r.fullName === repName);
+        return {
+          repName,
+          role: repObj?.role || "Sales Rep",
+          wonCount: p.wonCount,
+          wonRevenue: p.wonRevenue,
+          lostCount: p.lostCount,
+          pipelineCount: p.pipelineCount,
+          logsCount: p.logsCount,
+          wonDeals: p.wonDeals.map((w) => ({ title: w.title, amount: w.amount, product: w.product })),
+          lostDeals: p.lostDeals.map((l) => ({ title: l.title, reason: l.reason })),
+          pipelineDeals: p.pipelineDeals.map((pipe) => ({
+            title: pipe.title,
+            stage: pipe.stage,
+            amount: pipe.amount,
+          })),
+          consultedCompanies: p.consultedCompanies,
+        };
+      });
+
+      pdfBuffer = await WeeklyReportPdfService.generateReportPdf({
+        reportTitle,
+        periodString,
+        publicationDate: formatDateFormal(periodEnd),
+        totalWonRevenue,
+        dealsWonCount,
+        dealsLostCount,
+        activePipelineCount,
+        newAccountsCount,
+        wonDeals,
+        lostDeals,
+        pipelineDeals,
+        repPerformance: repPerformanceForPdf,
+      });
+    } catch (pdfErr: any) {
+      console.error("Failed to generate weekly report PDF buffer:", pdfErr.message);
+    }
+
+    // 8. Dispatch Telegram Notification to Managers (with PDF Attachment)
     let managersNotified = 0;
     const managerIds = this.salesRepsService?.getActiveManagerChatIds
       ? await this.salesRepsService.getActiveManagerChatIds(this.managerChatIds)
       : this.managerChatIds;
 
     if (this.bot && managerIds.length > 0) {
+      const safePeriod = periodString.replace(/[^a-zA-Z0-9]/g, "_");
       const telegramMessage =
         `*Weekly Executive Sales Report Published*\n\n` +
         `• *Reporting Period:* ${periodString}\n` +
@@ -925,12 +906,20 @@ export class ReportsService {
         `• *Contracts Won:* ${dealsWonCount} | *Losses:* ${dealsLostCount}\n` +
         `• *Active Pipeline Deals:* ${activePipelineCount}\n` +
         `• *Total Registered Accounts:* ${newAccountsCount}\n\n` +
-        `📄 [Open Formal Report in Notion](${reportUrl})\n\n` +
-        `_To export to PDF: Open the document in Notion, click '...' at the top-right, and select 'Export as PDF'._`;
+        `📄 [Open Relational Audit in Notion](${reportUrl})\n` +
+        `_Pixel-perfect executive PDF document attached above._`;
 
       for (const chatId of managerIds) {
         try {
-          await this.bot.api.sendMessage(chatId, telegramMessage, { parse_mode: "Markdown" });
+          if (pdfBuffer) {
+            await this.bot.api.sendDocument(
+              chatId,
+              new InputFile(pdfBuffer, `Weekly_Sales_Report_${safePeriod}.pdf`),
+              { caption: telegramMessage, parse_mode: "Markdown" }
+            );
+          } else {
+            await this.bot.api.sendMessage(chatId, telegramMessage, { parse_mode: "Markdown" });
+          }
           managersNotified++;
         } catch (err: any) {
           console.error(`Failed to send Telegram report notification to manager ${chatId}:`, err.message);
@@ -949,6 +938,7 @@ export class ReportsService {
       activePipelineCount,
       newAccountsCount,
       managersNotified,
+      pdfBuffer,
     };
   }
 }
