@@ -1,7 +1,6 @@
 import { ResilientNotionClient } from "../notion/notionClient.js";
 import { env } from "../../config/env.js";
 
-export const DEFAULT_INVENTORY_DB_ID = "796f44a2-1044-4a4c-8adc-74a97fbbec94";
 
 export interface InventoryItem {
   id: string; // Notion Page ID or synthetic seed ID
@@ -83,7 +82,7 @@ export interface InventoryServiceOptions {
 
 export const DEFAULT_CATALOG: InventoryItem[] = [
   {
-    id: "3fed691d-57eb-81eb-a47c-ccc404d0b0d9",
+    id: "seed-yc345gf",
     itemCode: "YC345GF",
     productName: "SILENT DIESEL GENERATOR SET YC345GF",
     productDescription:
@@ -93,7 +92,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "Out of Stock",
   },
   {
-    id: "3fed691d-57eb-8180-90e8-e8f38a06e361",
+    id: "seed-ats400a",
     itemCode: "ATS-400A",
     productName: "ATS (Automatic Transfer Switch 400A)",
     productDescription:
@@ -103,7 +102,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "3fed691d-57eb-818e-875f-efb802c6a5a3",
+    id: "seed-yc150gf",
     itemCode: "YC150GF",
     productName: "SILENT DIESEL GENERATOR SET YC150GF",
     productDescription:
@@ -113,7 +112,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "3fed691d-57eb-812e-83b8-e0487db3744c",
+    id: "seed-yc50gf",
     itemCode: "YC50GF",
     productName: "SILENT DIESEL GENERATOR SET YC50GF",
     productDescription:
@@ -123,7 +122,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "3fed691d-57eb-811e-a9f0-d24ec2545633",
+    id: "seed-ycp4in",
     itemCode: "YCP4IN",
     productName: "YC DIESEL WATER PUMP SET 4-INCH",
     productDescription:
@@ -147,7 +146,7 @@ export class InventoryService {
 
   constructor(options: InventoryServiceOptions = {}) {
     this.notionClient = options.notionClient;
-    this.inventoryDbId = options.inventoryDbId || env.NOTION_INVENTORY_DB_ID || DEFAULT_INVENTORY_DB_ID;
+    this.inventoryDbId = options.inventoryDbId || env.NOTION_INVENTORY_DB_ID || "";
     this.salesLogsDbId = options.salesLogsDbId || env.NOTION_SALES_LOGS_DB_ID;
 
     // Initialize in-memory cache with clone of seed data
