@@ -123,6 +123,42 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   };
 
   const handleSelectCatalogItem = (index: number, catItem: InventoryItem) => {
+    // Check if this item is already in another line item
+    const existingIdx = lineItems.findIndex(
+      (it, idx) =>
+        idx !== index &&
+        ((it.itemCode && it.itemCode.toLowerCase() === catItem.itemCode.toLowerCase()) ||
+          it.productName.trim().toLowerCase() === catItem.productName.trim().toLowerCase())
+    );
+
+    if (existingIdx >= 0) {
+      const existing = lineItems[existingIdx]!;
+      const currentQty = lineItems[index]?.quantity || 1;
+      const newQty = (existing.quantity || 1) + currentQty;
+
+      setLineItems((prev) => {
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...existing,
+          quantity: newQty,
+          totalPrice: newQty * (existing.unitPrice || catItem.unitPrice),
+        };
+        // Remove the extra line item row if multiple
+        if (updated.length > 1) {
+          updated.splice(index, 1);
+        }
+        return updated.map((it, idx) => ({ ...it, itemNo: idx + 1 }));
+      });
+
+      setNotification({
+        type: 'success',
+        message: `"${catItem.productName}" is already in quote. Increased quantity to ${newQty}.`,
+      });
+      setActiveDropdownIndex(null);
+      triggerHaptic('medium');
+      return;
+    }
+
     setLineItems((prev) => {
       const updated = [...prev];
       const current = updated[index]!;
@@ -142,6 +178,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   };
 
   const handleAddLineItem = () => {
+    // If the last item is unselected/empty, guide user to fill it first
+    const last = lineItems[lineItems.length - 1];
+    if (last && !last.productName.trim() && !last.itemCode) {
+      setActiveDropdownIndex(lineItems.length - 1);
+      setNotification({
+        type: 'error',
+        message: 'Please choose equipment for the current item before adding another.',
+      });
+      triggerHaptic('warning');
+      return;
+    }
+
     setLineItems((prev) => [
       ...prev,
       {
@@ -154,6 +202,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         totalPrice: 0,
       },
     ]);
+    setActiveDropdownIndex(lineItems.length);
     triggerHaptic('medium');
   };
 
@@ -243,14 +292,30 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       return;
     }
 
-    setIsSubmittingOffer(true);
-    triggerHaptic('medium');
+    // Consolidate line items by itemCode / productName to guarantee no duplicate cards
+    const consolidatedLineItems: LineItem[] = [];
+    for (const item of lineItems) {
+      if (!item.productName.trim() && !item.itemCode) continue;
+      const key = (item.itemCode || item.productName).trim().toLowerCase();
+      const existing = consolidatedLineItems.find(
+        (c) => (c.itemCode || c.productName).trim().toLowerCase() === key
+      );
+      if (existing) {
+        const mergedQty = (existing.quantity || 1) + (item.quantity || 1);
+        existing.quantity = mergedQty;
+        existing.totalPrice = mergedQty * (existing.unitPrice || 0);
+      } else {
+        consolidatedLineItems.push({ ...item });
+      }
+    }
+
+    const itemsToSubmit = consolidatedLineItems.map((it, idx) => ({ ...it, itemNo: idx + 1 }));
 
     try {
       const res = await api.submitProposedOffer(currentDeal.pageId, {
         productType: primaryName,
         offerAmount: finalAmount,
-        lineItems,
+        lineItems: itemsToSubmit.length > 0 ? itemsToSubmit : lineItems,
         companyName: displayName,
       });
 
@@ -261,9 +326,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         productType: primaryName,
         offerAmount: finalAmount,
         amount: finalAmount,
-        lineItems,
+        lineItems: itemsToSubmit.length > 0 ? itemsToSubmit : lineItems,
       };
       setCurrentDeal(updated);
+      setLineItems(itemsToSubmit.length > 0 ? itemsToSubmit : lineItems);
       setEquipmentType(primaryName);
       setOfferAmount(finalAmount.toLocaleString());
       if (onDealUpdated) onDealUpdated(updated);
@@ -838,12 +904,25 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   </div>
 
                   {lineItems.map((item, index) => {
-                    const filteredCatalog = catalog.filter(
-                      (c) =>
+                    const selectedItemCodesInOtherLines = new Set(
+                      lineItems
+                        .filter((_, idx) => idx !== index)
+                        .map((it) => (it.itemCode || it.productName.trim()).toLowerCase())
+                        .filter(Boolean)
+                    );
+
+                    const filteredCatalog = catalog.filter((c) => {
+                      const isAlreadySelected =
+                        selectedItemCodesInOtherLines.has(c.itemCode.toLowerCase()) ||
+                        selectedItemCodesInOtherLines.has(c.productName.trim().toLowerCase());
+                      if (isAlreadySelected) return false;
+
+                      return (
                         !item.productName ||
                         c.productName.toLowerCase().includes(item.productName.toLowerCase()) ||
                         c.itemCode.toLowerCase().includes(item.productName.toLowerCase())
-                    );
+                      );
+                    });
                     const isSpecsOpen = expandedSpecsIndex === index;
 
                     return (
@@ -897,39 +976,53 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           />
 
                           {/* Autocomplete Dropdown */}
-                          {activeDropdownIndex === index && filteredCatalog.length > 0 && (
-                            <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 rounded-xl shadow-xl divide-y divide-black/5 dark:divide-white/5">
-                              {filteredCatalog.map((cat) => (
-                                <button
-                                  key={cat.id || cat.itemCode}
-                                  type="button"
-                                  onClick={() => handleSelectCatalogItem(index, cat)}
-                                  className="w-full text-left p-2.5 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition-colors flex items-start justify-between space-x-2"
-                                >
-                                  <div>
-                                    <div className="flex items-center space-x-1.5">
-                                      <span className="font-mono text-[10px] font-bold text-[#0071e3]">
-                                        [{cat.itemCode}]
-                                      </span>
-                                      <span className="font-semibold text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
-                                        {cat.productName}
-                                      </span>
-                                    </div>
-                                    <p className="text-[10px] text-[#86868b] line-clamp-1 mt-0.5">
-                                      {cat.productDescription.split('\n')[0]}
-                                    </p>
+                          {activeDropdownIndex === index && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-20"
+                                onClick={() => setActiveDropdownIndex(null)}
+                              />
+                              <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-black/10 dark:border-white/10 rounded-xl shadow-xl divide-y divide-black/5 dark:divide-white/5 animate-in fade-in duration-100">
+                                {filteredCatalog.length > 0 ? (
+                                  filteredCatalog.map((cat) => (
+                                    <button
+                                      key={cat.id || cat.itemCode}
+                                      type="button"
+                                      onClick={() => handleSelectCatalogItem(index, cat)}
+                                      className="w-full text-left p-2.5 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition-colors flex items-start justify-between space-x-2"
+                                    >
+                                      <div>
+                                        <div className="flex items-center space-x-1.5">
+                                          <span className="font-mono text-[10px] font-bold text-[#0071e3]">
+                                            [{cat.itemCode}]
+                                          </span>
+                                          <span className="font-semibold text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
+                                            {cat.productName}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-[#86868b] line-clamp-1 mt-0.5">
+                                          {cat.productDescription.split('\n')[0]}
+                                        </p>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                          ETB {cat.unitPrice.toLocaleString()}
+                                        </span>
+                                        <p className="text-[10px] text-[#86868b]">
+                                          Stock: {cat.quantityInStock}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="p-3 text-center text-[11px] text-[#86868b]">
+                                    {selectedItemCodesInOtherLines.size > 0
+                                      ? 'All matching catalog items are already added to this quote. Adjust item quantity above.'
+                                      : 'No matching equipment found in stock catalog.'}
                                   </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                      ETB {cat.unitPrice.toLocaleString()}
-                                    </span>
-                                    <p className="text-[10px] text-[#86868b]">
-                                      Stock: {cat.quantityInStock}
-                                    </p>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
+                                )}
+                              </div>
+                            </>
                           )}
                         </div>
 
