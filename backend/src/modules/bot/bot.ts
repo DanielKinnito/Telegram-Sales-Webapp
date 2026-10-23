@@ -101,13 +101,27 @@ export async function sendStockAdjustmentAlertToManagers(
     ],
   ];
 
+  if (!adjustment.managerMessages) {
+    adjustment.managerMessages = [];
+  }
+
   let count = 0;
   for (const chatId of managerChatIds) {
     try {
-      await bot.api.sendMessage(chatId, message, {
+      const sent = await bot.api.sendMessage(chatId, message, {
         parse_mode: "Markdown",
         reply_markup: { inline_keyboard: keyboard },
       });
+      const msgId = sent?.message_id ?? sent?.messageId;
+      if (msgId) {
+        adjustment.managerMessages.push({
+          chatId,
+          messageId: msgId,
+        });
+        if (registeredInventoryService?.recordManagerMessage && adjustment.requestId) {
+          registeredInventoryService.recordManagerMessage(adjustment.requestId, chatId, msgId);
+        }
+      }
       count++;
     } catch (err: any) {
       console.warn(`Could not dispatch stock alert to manager ${chatId}:`, err.message);
@@ -620,7 +634,18 @@ export function createBot(options: CreateBotOptions = {}) {
 
       const pending = registeredInventoryService.getPendingAdjustment(requestId);
       if (!pending || pending.status !== "Pending") {
-        await ctx.answerCallbackQuery({ text: "Adjustment request already processed or expired." }).catch(() => {});
+        const alreadyResolved = pending?.status === "Approved" || pending?.status === "Rejected";
+        await ctx.answerCallbackQuery({
+          text: alreadyResolved
+            ? `⚠️ Request already ${pending.status.toLowerCase()} by Manager ${pending.approvedByName || "another Manager"}.`
+            : "Adjustment request already processed or expired.",
+          show_alert: true,
+        }).catch(() => {});
+        if (ctx.callbackQuery.message?.message_id && ctx.chat?.id) {
+          await bot.api.editMessageReplyMarkup(ctx.chat.id, ctx.callbackQuery.message.message_id, {
+            reply_markup: { inline_keyboard: [] },
+          }).catch(() => {});
+        }
         return;
       }
 
@@ -630,8 +655,13 @@ export function createBot(options: CreateBotOptions = {}) {
       if (isApprove) {
         await registeredInventoryService.approveAdjustment(requestId, managerName);
         await ctx.answerCallbackQuery({ text: isNew ? "✅ New item added to catalog!" : "✅ Stock adjustment approved!" }).catch(() => {});
-        if (ctx.callbackQuery.message) {
-          const approvedMsg = isNew
+      } else {
+        await registeredInventoryService.rejectAdjustment(requestId, managerName);
+        await ctx.answerCallbackQuery({ text: isNew ? "❌ New item proposal rejected." : "❌ Stock adjustment rejected." }).catch(() => {});
+      }
+
+      const resolutionMsg = isApprove
+        ? (isNew
             ? `✅ *NEW INVENTORY ITEM APPROVED & ADDED*\n\n` +
               `• *Item Code:* \`${pending.itemCode}\`\n` +
               `• *Product Name:* ${pending.productName}\n` +
@@ -646,15 +676,8 @@ export function createBot(options: CreateBotOptions = {}) {
               `• *Updated Stock:* ${pending.newStock} units (${deltaSign} applied)\n` +
               `• *Approved by:* Manager ${managerName}\n` +
               `• *Originally Requested by:* ${pending.requestedByName}\n` +
-              `• *Reason:* ${pending.reason}`;
-
-          await ctx.editMessageText(approvedMsg, { parse_mode: "Markdown" }).catch(() => {});
-        }
-      } else {
-        await registeredInventoryService.rejectAdjustment(requestId, managerName);
-        await ctx.answerCallbackQuery({ text: isNew ? "❌ New item proposal rejected." : "❌ Stock adjustment rejected." }).catch(() => {});
-        if (ctx.callbackQuery.message) {
-          const rejectedMsg = isNew
+              `• *Reason:* ${pending.reason}`)
+        : (isNew
             ? `❌ *NEW INVENTORY ITEM PROPOSAL REJECTED*\n\n` +
               `• *Item Code:* \`${pending.itemCode}\`\n` +
               `• *Product Name:* ${pending.productName}\n` +
@@ -667,11 +690,65 @@ export function createBot(options: CreateBotOptions = {}) {
               `• *Stock Kept at:* ${pending.currentStock} units\n` +
               `• *Rejected by:* Manager ${managerName}\n` +
               `• *Originally Requested by:* ${pending.requestedByName}\n` +
-              `• *Reason:* ${pending.reason}`;
+              `• *Reason:* ${pending.reason}`);
 
-          await ctx.editMessageText(rejectedMsg, { parse_mode: "Markdown" }).catch(() => {});
+      // 1. Immediately edit message of acting manager to remove buttons and show confirmation
+      if (ctx.callbackQuery.message) {
+        await ctx.editMessageText(resolutionMsg, { parse_mode: "Markdown" }).catch(() => {});
+      }
+
+      // 2. Edit all messages sent to other managers to remove buttons and show the updated resolution
+      const updatedChatIds = new Set<number>();
+      if (ctx.chat?.id) {
+        updatedChatIds.add(ctx.chat.id);
+      }
+
+      const managerMessages = pending.managerMessages || [];
+      for (const mm of managerMessages) {
+        if (ctx.chat?.id && mm.chatId === ctx.chat.id) {
+          continue;
+        }
+        try {
+          await bot.api.editMessageText(mm.chatId, mm.messageId, resolutionMsg, {
+            parse_mode: "Markdown",
+          });
+          updatedChatIds.add(mm.chatId);
+        } catch (editErr: any) {
+          console.warn(`Could not edit manager message for ${mm.chatId}:`, editErr?.message);
+          try {
+            await bot.api.sendMessage(mm.chatId, resolutionMsg, { parse_mode: "Markdown" });
+            updatedChatIds.add(mm.chatId);
+          } catch {}
         }
       }
+
+      // 3. Ensure any configured active manager who did not have a recorded message still receives the resolution notice
+      let allManagerIds = managerChatIds;
+      if (salesRepsService && typeof salesRepsService.getActiveManagerChatIds === "function") {
+        try {
+          allManagerIds = await salesRepsService.getActiveManagerChatIds(managerChatIds);
+        } catch {}
+      }
+      for (const mgrId of allManagerIds) {
+        if (!updatedChatIds.has(mgrId)) {
+          try {
+            await bot.api.sendMessage(mgrId, resolutionMsg, { parse_mode: "Markdown" });
+            updatedChatIds.add(mgrId);
+          } catch (err: any) {
+            console.warn(`Could not dispatch resolution message to manager ${mgrId}:`, err?.message);
+          }
+        }
+      }
+
+      // 4. Also notify the requester (Front Desk) if they are not in the manager set
+      if (pending.requestedByTelegramId && !updatedChatIds.has(pending.requestedByTelegramId)) {
+        try {
+          await bot.api.sendMessage(pending.requestedByTelegramId, resolutionMsg, {
+            parse_mode: "Markdown",
+          });
+        } catch {}
+      }
+
       return;
     }
 

@@ -29,6 +29,7 @@ export interface PendingStockAdjustment {
   requestedAt: string;
   status: "Pending" | "Approved" | "Rejected";
   approvedByName?: string | undefined;
+  managerMessages?: Array<{ chatId: number; messageId: number }>;
 }
 
 export interface CreateAdjustmentRequestInput {
@@ -277,10 +278,24 @@ export class InventoryService {
       requestedByName: input.requestedByName,
       requestedAt: now,
       status: "Pending",
+      managerMessages: [],
     };
 
     this.pendingAdjustments.set(shortId, adjustment);
     return adjustment;
+  }
+
+  /**
+   * Tracks a dispatched Telegram manager notification message for editing/resolution later.
+   */
+  public recordManagerMessage(requestId: string, chatId: number, messageId: number): void {
+    const adj = this.pendingAdjustments.get(requestId);
+    if (adj) {
+      if (!adj.managerMessages) {
+        adj.managerMessages = [];
+      }
+      adj.managerMessages.push({ chatId, messageId });
+    }
   }
 
   /**
