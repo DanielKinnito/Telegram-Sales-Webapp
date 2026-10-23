@@ -20,41 +20,51 @@ export const Header: React.FC<HeaderProps> = ({
   canSwitchRole = false,
   repRoleName = 'Sales Rep',
 }) => {
+  const displayRole = repRoleName || (canSwitchRole ? 'Manager' : 'Sales Rep');
+  const isManager = displayRole === 'Manager' || canSwitchRole;
+  const isFrontDesk = displayRole === 'Front Desk';
+
+  const roleColorClass = isManager
+    ? 'text-purple-600 dark:text-purple-400'
+    : isFrontDesk
+    ? 'text-amber-600 dark:text-amber-400'
+    : 'text-[#0071e3] dark:text-sky-400';
+
+  const cleanFirstName = (user.firstName || 'User').split('\n')[0].trim();
+  const cleanLastName = (user.lastName || '').split('\n')[0].trim();
+
   return (
     <header className="sticky top-0 z-40 w-full apple-glass px-4 py-2.5 transition-colors">
       <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-        {/* User Identity & CRM Sync Status */}
+        {/* User Identity & CRM Title */}
         <div className="flex items-center space-x-2.5 min-w-0">
           <div className="w-9 h-9 rounded-full bg-[#0071e3] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-            <span>{user.firstName.charAt(0)}</span>
+            <span>{cleanFirstName.charAt(0)}</span>
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5 truncate">
               <span className="text-sm font-semibold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
-                {user.firstName} {user.lastName || ''}
+                {cleanFirstName} {cleanLastName}
               </span>
-              <ShieldCheck className="w-3.5 h-3.5 text-[#0071e3] shrink-0" />
+              <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${isManager ? 'text-purple-600 dark:text-purple-400' : 'text-[#0071e3]'}`} />
             </div>
+            {/* Title in tiny font under their name */}
             <div className="flex items-center space-x-1.5">
+              <span className={`text-[10px] font-bold tracking-wider uppercase ${roleColorClass} shrink-0`}>
+                {displayRole}
+              </span>
+              <span className="text-[10px] text-[#86868b] dark:text-[#636366]">·</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[#34c759] animate-pulse shrink-0" />
-              <span className="text-[11px] text-[#6e6e73] dark:text-[#a1a1a6] font-medium truncate">
-                Notion CRM Connected
+              <span className="text-[10px] text-[#6e6e73] dark:text-[#a1a1a6] font-medium truncate">
+                Connected
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right Controls: Role Badge or Role Switcher & Theme Toggle */}
+        {/* Right Controls: Role Switcher (For Managers) & Theme Toggle */}
         <div className="flex items-center space-x-2 shrink-0">
-          {/* Explicit Manager Badge if user is an Executive Manager */}
-          {(canSwitchRole || repRoleName === 'Manager') && (
-            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-xs shadow-xs">
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-              <span>Manager</span>
-            </div>
-          )}
-
-          {canSwitchRole ? (
+          {canSwitchRole && (
             /* Apple Segmented View Switcher (For Managers to switch between Rep View and Front Desk View) */
             <div className="apple-segmented flex items-center p-0.5">
               <button
@@ -80,12 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Front Desk
               </button>
             </div>
-          ) : repRoleName !== 'Manager' ? (
-            /* Locked Role Pill for non-managers */
-            <div className="px-3 py-1 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/5 dark:border-white/10 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
-              {repRoleName}
-            </div>
-          ) : null}
+          )}
 
           {/* Theme Toggle Button */}
           <button

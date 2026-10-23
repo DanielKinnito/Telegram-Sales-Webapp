@@ -26,9 +26,10 @@ export function App() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed.fullName) {
+          const cleanFullName = parsed.fullName.split('\n')[0].trim();
           return {
             id: parsed.telegramId || 0,
-            firstName: parsed.fullName,
+            firstName: cleanFullName,
             lastName: undefined,
           };
         }
@@ -83,11 +84,12 @@ export function App() {
           setRepRoleName(res.rep.role);
 
           // Persist registered CRM profile in localStorage
+          const cleanFullName = res.rep.fullName.split('\n')[0].trim();
           try {
             localStorage.setItem(
               'crm_rep_profile',
               JSON.stringify({
-                fullName: res.rep.fullName,
+                fullName: cleanFullName,
                 role: res.rep.role,
                 telegramId: res.user?.id,
               })
@@ -97,7 +99,7 @@ export function App() {
           // Update user display to registered CRM Full Name
           setUser({
             id: res.user?.id || 0,
-            firstName: res.rep.fullName,
+            firstName: cleanFullName,
             lastName: undefined,
           });
 

@@ -853,9 +853,10 @@ export class ReportsService {
     let pdfBuffer: Buffer | undefined;
     try {
       const repPerformanceForPdf = Array.from(repPerformanceMap.entries()).map(([repName, p]) => {
-        const repObj = reps.find((r) => r.fullName === repName);
+        const cleanName = repName.split("\n")[0].trim();
+        const repObj = reps.find((r) => r.fullName === repName || r.fullName.split("\n")[0].trim() === cleanName);
         return {
-          repName,
+          repName: cleanName,
           role: repObj?.role || "Sales Rep",
           wonCount: p.wonCount,
           wonRevenue: p.wonRevenue,
@@ -882,9 +883,18 @@ export class ReportsService {
         dealsLostCount,
         activePipelineCount,
         newAccountsCount,
-        wonDeals,
-        lostDeals,
-        pipelineDeals,
+        wonDeals: wonDeals.map((w) => ({
+          ...w,
+          rep: w.rep.split("\n")[0].trim(),
+        })),
+        lostDeals: lostDeals.map((l) => ({
+          ...l,
+          rep: l.rep.split("\n")[0].trim(),
+        })),
+        pipelineDeals: pipelineDeals.map((p) => ({
+          ...p,
+          rep: p.rep.split("\n")[0].trim(),
+        })),
         repPerformance: repPerformanceForPdf,
       });
     } catch (pdfErr: any) {
