@@ -389,9 +389,22 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
                     {assignmentResult.account.assignedRep.telegramId})
                   </span>
                 </div>
-                <div className="pt-1 flex items-center space-x-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                  <span>Instant Telegram push notification dispatched to rep's phone.</span>
+                <div className="pt-1 flex items-center space-x-1.5 text-[11px] font-medium">
+                  {assignmentResult.notificationSent ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-emerald-700 dark:text-emerald-400">
+                        Instant Telegram push notification dispatched to rep's phone.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      <span className="text-amber-700 dark:text-amber-400">
+                        Lead recorded in CRM. (Telegram notification could not be delivered to rep's chat).
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 

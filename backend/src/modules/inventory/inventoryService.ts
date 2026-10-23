@@ -583,7 +583,9 @@ export class InventoryService {
 
         if (queryRes?.results && queryRes.results.length > 0) {
           notionPageId = queryRes.results[0].id;
-          targetItem.id = notionPageId;
+          if (notionPageId) {
+            targetItem.id = notionPageId;
+          }
         }
       } catch (findErr: any) {
         console.warn(`Could not resolve Notion page for ${itemCode}:`, findErr.message);

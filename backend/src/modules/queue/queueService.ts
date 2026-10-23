@@ -55,6 +55,15 @@ export interface QueueServiceOptions {
   bot?: any | undefined;
 }
 
+import { getTinCache } from "../leads/tinCache.js";
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export class QueueService {
   private readonly notionClient: ResilientNotionClient;
   private readonly salesRepsService: SalesRepsService;
@@ -76,24 +85,43 @@ export class QueueService {
    * Syncs the Rotational Queue with all Active Sales Reps in Notion.
    * Ensures any rep newly approved by management is immediately enrolled
    * in the round-robin distribution with Priority 1 (null timestamp).
+   * Also ensures non-Sales-Reps (Managers, Front Desk) are not active in the queue.
    */
   public async syncQueueWithActiveSalesReps(): Promise<void> {
     try {
       if (typeof this.salesRepsService?.getActiveSalesReps !== "function") return;
       const activeReps = await this.salesRepsService.getActiveSalesReps();
-      const salesRepsOnly = activeReps.filter((r) => r.role === "Sales Rep");
+      const activeSalesReps = activeReps.filter((r) => r.role === "Sales Rep" && r.status === "Active");
+      const activeSalesTids = new Set(activeSalesReps.map((r) => r.telegramId));
 
       const queueResponse = (await this.notionClient.queryDatabase(this.queueDbId)) as { results: any[] };
-      const existingTids = new Set(
-        (queueResponse.results || []).map(
-          (p: any) =>
-            p.properties?.["Rep ID"]?.title?.[0]?.plain_text ||
-            p.properties?.["Rep ID"]?.rich_text?.[0]?.plain_text ||
-            ""
-        )
-      );
+      const existingQueuePages = queueResponse.results || [];
+      const existingTids = new Set<string>();
 
-      for (const rep of salesRepsOnly) {
+      for (const page of existingQueuePages) {
+        const tid =
+          page.properties?.["Rep ID"]?.title?.[0]?.plain_text ||
+          page.properties?.["Rep ID"]?.rich_text?.[0]?.plain_text ||
+          "";
+
+        if (tid) {
+          existingTids.add(tid);
+          const currentStatus = page.properties?.["Availability Status"]?.select?.name;
+          // If the rep in the queue is NOT an active Sales Rep (e.g. Manager, Front Desk, Inactive), deactivate their queue entry
+          if (!activeSalesTids.has(tid) && currentStatus !== "Unavailable") {
+            await this.notionClient
+              .updatePage({
+                page_id: page.id,
+                properties: {
+                  "Availability Status": { select: { name: "Unavailable" } },
+                },
+              })
+              .catch(() => {});
+          }
+        }
+      }
+
+      for (const rep of activeSalesReps) {
         if (!existingTids.has(rep.telegramId)) {
           await this.notionClient.createPage({
             parent: { database_id: this.queueDbId },
@@ -120,8 +148,8 @@ export class QueueService {
   /**
    * Selects the next available sales rep based on round-robin fairness.
    * Priority:
-   * 1. Reps who have never been assigned (timestamp is null/undefined)
-   * 2. Reps with the oldest Last Assigned Timestamp
+   * 1. Active Sales Reps who have never been assigned (timestamp is null/undefined)
+   * 2. Active Sales Reps with the oldest Last Assigned Timestamp
    */
   public async getNextAvailableRep(): Promise<AvailableRep> {
     await this.syncQueueWithActiveSalesReps();
@@ -156,20 +184,36 @@ export class QueueService {
       return new Date(timeA).getTime() - new Date(timeB).getTime();
     });
 
-    const chosenPage = availablePages[0];
-    const repId =
-      chosenPage.properties?.["Rep ID"]?.title?.[0]?.plain_text ||
-      chosenPage.properties?.["Rep ID"]?.rich_text?.[0]?.plain_text ||
-      "";
+    for (const chosenPage of availablePages) {
+      const repId =
+        chosenPage.properties?.["Rep ID"]?.title?.[0]?.plain_text ||
+        chosenPage.properties?.["Rep ID"]?.rich_text?.[0]?.plain_text ||
+        "";
 
-    const repRecord = await this.salesRepsService.findSalesRepByTelegramId(repId);
+      const repRecord = await this.salesRepsService.findSalesRepByTelegramId(repId);
 
-    return {
-      queuePageId: chosenPage.id,
-      telegramId: repId,
-      fullName: repRecord?.fullName || `Rep ${repId}`,
-      pageId: repRecord?.pageId,
-    };
+      // Strictly ensure the chosen candidate is an active Sales Rep (not a Manager or Front Desk)
+      if (repRecord && repRecord.role === "Sales Rep" && repRecord.status === "Active") {
+        return {
+          queuePageId: chosenPage.id,
+          telegramId: repId,
+          fullName: repRecord.fullName || `Rep ${repId}`,
+          pageId: repRecord.pageId,
+        };
+      }
+
+      // If rep is not an active sales rep, mark unavailable in queue and keep checking next candidate
+      await this.notionClient
+        .updatePage({
+          page_id: chosenPage.id,
+          properties: {
+            "Availability Status": { select: { name: "Unavailable" } },
+          },
+        })
+        .catch(() => {});
+    }
+
+    throw new NoAvailableRepsError("No sales representatives are currently available in the queue.");
   }
 
   /**
@@ -239,6 +283,18 @@ export class QueueService {
       };
     }
 
+    if (input.contactName) {
+      properties["Contact Person"] = {
+        rich_text: [{ text: { content: input.contactName.trim() } }],
+      };
+    }
+
+    if (input.contactPhone) {
+      properties["Contact Phone"] = {
+        rich_text: [{ text: { content: input.contactPhone.trim() } }],
+      };
+    }
+
     const accountPage = await this.notionClient.createPage({
       parent: { database_id: this.accountsDbId },
       properties,
@@ -246,31 +302,36 @@ export class QueueService {
 
     // Create initial Deal in Deals DB linked to this Account
     try {
-        const dealProps: Record<string, any> = {
+      await this.notionClient.createPage({
+        parent: { database_id: env.NOTION_DEALS_DB_ID },
+        properties: {
           "Deal Title": {
             title: [{ text: { content: `${input.companyName.trim()} Order` } }],
           },
           "Stage": {
             select: { name: "Proposal" },
           },
-          "Account": {
-            relation: [{ id: accountPage.id }],
+          "Account Name": {
+            rich_text: [{ text: { content: input.companyName.trim() } }],
           },
-        };
-
-        if (rep.pageId) {
-          dealProps["Assigned Rep"] = {
-            relation: [{ id: rep.pageId }],
-          };
-        }
-
-        await this.notionClient.createPage({
-          parent: { database_id: env.NOTION_DEALS_DB_ID },
-          properties: dealProps,
-        });
+          "Rep Name": {
+            rich_text: [{ text: { content: rep.fullName } }],
+          },
+        },
+      });
     } catch (dealErr: any) {
       console.warn("Could not create initial Deal for walk-in lead:", dealErr.message);
     }
+
+    // Update in-memory TIN cache
+    try {
+      getTinCache().set(tin, {
+        companyName: input.companyName.trim(),
+        ownerName: rep.fullName,
+        assignedDate: today,
+        pageId: accountPage.id,
+      });
+    } catch {}
 
     // 5. Send Telegram notification to assigned rep
     let notificationSent = false;
@@ -278,22 +339,24 @@ export class QueueService {
       try {
         const assignedBy = input.assignedByStaffName || "Front Desk";
         const message =
-          `🔔 *New Walk-In Lead Assigned!*\n\n` +
-          `• *Company:* ${input.companyName.trim()}\n` +
-          `• *TIN:* ${tin}\n` +
-          (input.address ? `• *Address:* ${input.address.trim()}\n` : "") +
-          (input.industry ? `• *Industry:* ${input.industry.trim()}\n` : "") +
-          `• *Assigned by:* ${assignedBy}\n\n` +
+          `🔔 <b>New Walk-In Lead Assigned!</b>\n\n` +
+          `• <b>Company:</b> ${escapeHtml(input.companyName.trim())}\n` +
+          `• <b>TIN:</b> <code>${tin}</code>\n` +
+          (input.address ? `• <b>Address:</b> ${escapeHtml(input.address.trim())}\n` : "") +
+          (input.industry ? `• <b>Industry:</b> ${escapeHtml(input.industry.trim())}\n` : "") +
+          (input.contactName ? `• <b>Contact Person:</b> ${escapeHtml(input.contactName.trim())}\n` : "") +
+          (input.contactPhone ? `• <b>Contact Phone:</b> <code>${escapeHtml(input.contactPhone.trim())}</code>\n` : "") +
+          `• <b>Assigned by:</b> ${escapeHtml(assignedBy)}\n\n` +
           `Open the Sales Mini App to view customer details and follow up.`;
 
         const chatId = Number.isInteger(Number(rep.telegramId))
           ? Number(rep.telegramId)
           : rep.telegramId;
 
-        await this.bot.api.sendMessage(chatId, message, { parse_mode: "Markdown" });
+        await this.bot.api.sendMessage(chatId, message, { parse_mode: "HTML" });
         notificationSent = true;
-      } catch (err) {
-        console.error("Failed to send Telegram notification to assigned rep:", err);
+      } catch (err: any) {
+        console.error("Failed to send Telegram notification to assigned rep:", err.message || err);
       }
     }
 

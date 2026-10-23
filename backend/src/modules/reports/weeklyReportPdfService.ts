@@ -56,7 +56,7 @@ export class WeeklyReportPdfService {
    */
   private static cleanName(val: string | undefined | null): string {
     if (!val) return "";
-    return val.split("\n")[0].trim();
+    return (val.split("\n")[0] || "").trim();
   }
 
   /**

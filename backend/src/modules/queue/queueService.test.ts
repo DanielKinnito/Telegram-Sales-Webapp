@@ -195,11 +195,99 @@ describe("QueueService (Round-Robin Engine)", () => {
         })
       );
 
-      // Verifies Telegram notification dispatched to assigned rep
+      // Verifies Deal created in Deals DB with Account Name and Rep Name
+      expect(mockNotionClient.createPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parent: { database_id: expect.any(String) },
+          properties: expect.objectContaining({
+            "Deal Title": {
+              title: [{ text: { content: "Oromia Seeds PLC Order" } }],
+            },
+            "Stage": {
+              select: { name: "Proposal" },
+            },
+            "Account Name": {
+              rich_text: [{ text: { content: "Oromia Seeds PLC" } }],
+            },
+            "Rep Name": {
+              rich_text: [{ text: { content: "Samuel Green" } }],
+            },
+          }),
+        })
+      );
+
+      // Verifies Telegram notification dispatched to assigned rep with HTML parse mode
       expect(mockBot.api.sendMessage).toHaveBeenCalledWith(
         777888,
         expect.stringMatching(/New Walk-In Lead Assigned/i),
-        expect.anything()
+        expect.objectContaining({ parse_mode: "HTML" })
+      );
+    });
+
+    it("skips queue candidates who are Managers and assigns to active Sales Rep", async () => {
+      (mockLeadsService.checkTin as any).mockResolvedValue({ available: true });
+
+      (mockNotionClient.queryDatabase as any).mockResolvedValue({
+        results: [
+          {
+            id: "queue_mgr_1",
+            properties: {
+              "Rep ID": { title: [{ plain_text: "999000" }] },
+              "Availability Status": { select: { name: "Available" } },
+              "Last Assigned Timestamp": { date: { start: "2026-10-01T08:00:00.000Z" } }, // Oldest timestamp
+            },
+          },
+          {
+            id: "queue_rep_2",
+            properties: {
+              "Rep ID": { title: [{ plain_text: "777888" }] },
+              "Availability Status": { select: { name: "Available" } },
+              "Last Assigned Timestamp": { date: { start: "2026-10-02T10:00:00.000Z" } },
+            },
+          },
+        ],
+      });
+
+      // 999000 is a Manager, 777888 is an active Sales Rep
+      (mockSalesRepsService.findSalesRepByTelegramId as any).mockImplementation(async (id: string) => {
+        if (id === "999000") {
+          return {
+            pageId: "rep_mgr",
+            telegramId: "999000",
+            fullName: "Executive Boss",
+            role: "Manager",
+            status: "Active",
+          };
+        }
+        return {
+          pageId: "rep_p777",
+          telegramId: "777888",
+          fullName: "Samuel Green",
+          role: "Sales Rep",
+          status: "Active",
+        };
+      });
+
+      (mockNotionClient.createPage as any).mockResolvedValue({ id: "acc_page_2" });
+      (mockNotionClient.updatePage as any).mockResolvedValue({ id: "queue_rep_2" });
+
+      const result = await service.assignWalkIn({
+        companyName: "Addis Trading",
+        tin: "0012345678",
+      });
+
+      // Must assign to Samuel Green (Sales Rep), NOT Executive Boss (Manager)!
+      expect(result.account.assignedRep.fullName).toBe("Samuel Green");
+      expect(result.account.assignedRep.telegramId).toBe("777888");
+
+      // Verifies manager's queue entry was marked Unavailable
+      expect(mockNotionClient.updatePage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page_id: "queue_mgr_1",
+          properties: expect.objectContaining({
+            "Availability Status": { select: { name: "Unavailable" } },
+          }),
+        })
       );
     });
   });

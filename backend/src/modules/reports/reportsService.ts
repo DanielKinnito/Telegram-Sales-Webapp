@@ -853,8 +853,8 @@ export class ReportsService {
     let pdfBuffer: Buffer | undefined;
     try {
       const repPerformanceForPdf = Array.from(repPerformanceMap.entries()).map(([repName, p]) => {
-        const cleanName = repName.split("\n")[0].trim();
-        const repObj = reps.find((r) => r.fullName === repName || r.fullName.split("\n")[0].trim() === cleanName);
+        const cleanName = (repName.split("\n")[0] || "").trim();
+        const repObj = reps.find((r) => r.fullName === repName || (r.fullName.split("\n")[0] || "").trim() === cleanName);
         return {
           repName: cleanName,
           role: repObj?.role || "Sales Rep",
@@ -885,15 +885,15 @@ export class ReportsService {
         newAccountsCount,
         wonDeals: wonDeals.map((w) => ({
           ...w,
-          rep: w.rep.split("\n")[0].trim(),
+          rep: (w.rep?.split("\n")[0] || w.rep || "").trim(),
         })),
         lostDeals: lostDeals.map((l) => ({
           ...l,
-          rep: l.rep.split("\n")[0].trim(),
+          rep: (l.rep?.split("\n")[0] || l.rep || "").trim(),
         })),
         pipelineDeals: pipelineDeals.map((p) => ({
           ...p,
-          rep: p.rep.split("\n")[0].trim(),
+          rep: (p.rep?.split("\n")[0] || p.rep || "").trim(),
         })),
         repPerformance: repPerformanceForPdf,
       });
