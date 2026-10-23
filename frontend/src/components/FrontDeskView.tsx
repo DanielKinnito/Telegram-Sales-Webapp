@@ -67,10 +67,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
     }
   }, [activeSubTab]);
 
-  const loadCatalog = async () => {
+  const loadCatalog = async (forceRefresh = false) => {
     setIsLoadingCatalog(true);
     try {
-      const res = await api.getCatalog();
+      const res = await api.getCatalog(forceRefresh);
       if (res?.catalog) {
         setCatalog(res.catalog);
       }
@@ -218,7 +218,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
         }
 
         setIsAdjustmentModalOpen(false);
-        loadCatalog();
+        loadCatalog(true);
       } catch (err: any) {
         triggerHaptic('error');
         const errMsg = err.message || 'Failed to submit new product proposal.';
@@ -281,7 +281,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
       }
 
       setIsAdjustmentModalOpen(false);
-      loadCatalog();
+      loadCatalog(true);
     } catch (err: any) {
       triggerHaptic('error');
       const errMsg = err.message || 'Failed to submit stock adjustment.';
@@ -582,7 +582,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ activeRole = 'fron
             <div className="flex items-center space-x-2">
               <button
                 type="button"
-                onClick={loadCatalog}
+                onClick={() => loadCatalog(true)}
                 disabled={isLoadingCatalog}
                 className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-black/10 dark:border-white/10 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white apple-press transition-colors"
                 title="Refresh catalog"

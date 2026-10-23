@@ -164,15 +164,15 @@ describe("InventoryService", () => {
 
   describe("deductStockForDeal", () => {
     it("decrements inventory quantities when a deal is Won", async () => {
-      const initialItem = await service.findItemByCodeOrName("YC345GF");
-      const initialStock = initialItem?.quantityInStock || 4;
+      const initialItem = await service.findItemByCodeOrName("ATS-400A");
+      const initialStock = initialItem?.quantityInStock ?? 10;
 
       const result = await service.deductStockForDeal([
         {
-          itemCode: "YC345GF",
-          productName: "SILENT DIESEL GENERATOR SET YC345GF",
+          itemCode: "ATS-400A",
+          productName: "ATS (Automatic Transfer Switch 400A)",
           quantity: 2,
-          unitPrice: 1850000,
+          unitPrice: 120000,
         },
       ]);
 
@@ -181,7 +181,7 @@ describe("InventoryService", () => {
       expect(result.deductedItems[0]?.deductedQty).toBe(2);
       expect(result.deductedItems[0]?.remainingStock).toBe(initialStock - 2);
 
-      const current = await service.findItemByCodeOrName("YC345GF");
+      const current = await service.findItemByCodeOrName("ATS-400A");
       expect(current?.quantityInStock).toBe(initialStock - 2);
     });
 

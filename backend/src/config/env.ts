@@ -20,7 +20,7 @@ export const envSchema = z.object({
   NOTION_SALES_LOGS_DB_ID: z.string().min(1, "NOTION_SALES_LOGS_DB_ID is required"),
   NOTION_QUEUE_DB_ID: z.string().min(1, "NOTION_QUEUE_DB_ID is required"),
   NOTION_REPORTS_DB_ID: z.string().optional(),
-  NOTION_INVENTORY_DB_ID: z.string().optional(),
+  NOTION_INVENTORY_DB_ID: z.string().optional().default("796f44a2-1044-4a4c-8adc-74a97fbbec94"),
   NOTION_PARENT_PAGE_ID: z.string().optional(),
   TELEGRAM_MANAGER_CHAT_IDS: z.string().optional().default(""),
   STORAGE_PROVIDER: z.enum(["supabase", "s3", "r2", "mock"]).default("supabase"),

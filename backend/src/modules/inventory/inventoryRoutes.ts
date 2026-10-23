@@ -16,9 +16,10 @@ export function createInventoryRouter(options: InventoryRouterOptions): Router {
   const { inventoryService, salesRepsService, bot, managerChatIds = [] } = options;
 
   // 1. Get live inventory catalog
-  router.get("/", verifyTelegramAuth, async (_req: AuthenticatedRequest, res) => {
+  router.get("/", verifyTelegramAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const catalog = await inventoryService.listCatalog();
+      const forceRefresh = req.query.refresh === "true";
+      const catalog = await inventoryService.listCatalog(forceRefresh);
       return res.status(200).json({ success: true, catalog });
     } catch (err: any) {
       return res.status(500).json({ error: "Failed to retrieve inventory catalog", details: err.message });

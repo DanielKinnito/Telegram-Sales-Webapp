@@ -313,8 +313,10 @@ export const api = {
   },
 
   // 6. Inventory Catalog & Stock Adjustments
-  getCatalog: async (): Promise<{ success: boolean; catalog: InventoryItem[] }> => {
-    return request<{ success: boolean; catalog: InventoryItem[] }>('/api/inventory');
+  getCatalog: async (forceRefresh = false): Promise<{ success: boolean; catalog: InventoryItem[] }> => {
+    return request<{ success: boolean; catalog: InventoryItem[] }>(
+      forceRefresh ? '/api/inventory?refresh=true' : '/api/inventory'
+    );
   },
 
   requestStockAdjustment: async (data: {

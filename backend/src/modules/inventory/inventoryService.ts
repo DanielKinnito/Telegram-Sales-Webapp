@@ -1,37 +1,16 @@
-import type { ResilientNotionClient } from "../notion/notionClient.js";
+import { ResilientNotionClient } from "../notion/notionClient.js";
 import { env } from "../../config/env.js";
 
+export const DEFAULT_INVENTORY_DB_ID = "796f44a2-1044-4a4c-8adc-74a97fbbec94";
+
 export interface InventoryItem {
-  id: string;
+  id: string; // Notion Page ID or synthetic seed ID
   itemCode: string;
   productName: string;
   productDescription: string;
   unitPrice: number;
   quantityInStock: number;
   status: "In Stock" | "Low Stock" | "Out of Stock";
-}
-
-export interface LineItem {
-  itemNo?: number;
-  itemCode?: string;
-  productName: string;
-  productDescription?: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice?: number;
-}
-
-export interface CreateAdjustmentRequestInput {
-  itemId?: string | undefined;
-  itemCode: string;
-  productName?: string | undefined;
-  productDescription?: string | undefined;
-  unitPrice?: number | undefined;
-  isNewItem?: boolean | undefined;
-  delta: number;
-  reason: string;
-  requestedByTelegramId: number;
-  requestedByName: string;
 }
 
 export interface PendingStockAdjustment {
@@ -53,17 +32,36 @@ export interface PendingStockAdjustment {
   approvedByName?: string | undefined;
 }
 
-export interface DirectAdjustInput {
-  itemId?: string | undefined;
+export interface CreateAdjustmentRequestInput {
+  isNewItem?: boolean | undefined;
   itemCode: string;
   productName?: string | undefined;
   productDescription?: string | undefined;
   unitPrice?: number | undefined;
+  delta?: number | undefined;
+  reason?: string | undefined;
+  requestedByTelegramId: number;
+  requestedByName: string;
+}
+
+export interface DirectAdjustInput {
   isNewItem?: boolean | undefined;
+  itemCode: string;
+  productName?: string | undefined;
+  productDescription?: string | undefined;
+  unitPrice?: number | undefined;
   delta?: number | undefined;
   newQuantity?: number | undefined;
   reason?: string | undefined;
   updatedByName: string;
+}
+
+export interface LineItem {
+  itemCode?: string | undefined;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  description?: string | undefined;
 }
 
 export interface DeductResult {
@@ -85,17 +83,17 @@ export interface InventoryServiceOptions {
 
 export const DEFAULT_CATALOG: InventoryItem[] = [
   {
-    id: "seed-yc345gf",
+    id: "3fed691d-57eb-81eb-a47c-ccc404d0b0d9",
     itemCode: "YC345GF",
     productName: "SILENT DIESEL GENERATOR SET YC345GF",
     productDescription:
-      "Standby Power: 344KVA/275KW\nPrime Power: 313KVA/250KW\nRPM:1500\nP.F:0.8\n50HZ, IP Protection: 23, Insulation class : H\nEngine:YUCHAI\nModel:YC6MK420L-D20\nAlternator: YUCHAI\nModel: YC-250-4",
+      "Standby Power: 380KVA/304KW\nPrime Power: 345KVA/276KW\nRPM:1500\nP.F:0.8\n50HZ, IP Protection: 23, Insulation class : H\nEngine: YUCHAI Heavy Duty Diesel\nAlternator: YUCHAI Brushless Synchronous",
     unitPrice: 1850000,
-    quantityInStock: 4,
-    status: "In Stock",
+    quantityInStock: 0,
+    status: "Out of Stock",
   },
   {
-    id: "seed-ats400a",
+    id: "3fed691d-57eb-8180-90e8-e8f38a06e361",
     itemCode: "ATS-400A",
     productName: "ATS (Automatic Transfer Switch 400A)",
     productDescription:
@@ -105,7 +103,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "seed-yc150gf",
+    id: "3fed691d-57eb-818e-875f-efb802c6a5a3",
     itemCode: "YC150GF",
     productName: "SILENT DIESEL GENERATOR SET YC150GF",
     productDescription:
@@ -115,7 +113,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "seed-yc50gf",
+    id: "3fed691d-57eb-812e-83b8-e0487db3744c",
     itemCode: "YC50GF",
     productName: "SILENT DIESEL GENERATOR SET YC50GF",
     productDescription:
@@ -125,7 +123,7 @@ export const DEFAULT_CATALOG: InventoryItem[] = [
     status: "In Stock",
   },
   {
-    id: "seed-ycp4in",
+    id: "3fed691d-57eb-811e-a9f0-d24ec2545633",
     itemCode: "YCP4IN",
     productName: "YC DIESEL WATER PUMP SET 4-INCH",
     productDescription:
@@ -143,23 +141,23 @@ export class InventoryService {
 
   private catalogCache: InventoryItem[] = [];
   private lastCacheTime = 0;
-  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
   private pendingAdjustments: Map<string, PendingStockAdjustment> = new Map();
 
   constructor(options: InventoryServiceOptions = {}) {
     this.notionClient = options.notionClient;
-    this.inventoryDbId = options.inventoryDbId || env.NOTION_INVENTORY_DB_ID || "";
+    this.inventoryDbId = options.inventoryDbId || env.NOTION_INVENTORY_DB_ID || DEFAULT_INVENTORY_DB_ID;
     this.salesLogsDbId = options.salesLogsDbId || env.NOTION_SALES_LOGS_DB_ID;
 
     // Initialize in-memory cache with clone of seed data
     this.catalogCache = DEFAULT_CATALOG.map((item) => ({ ...item }));
-    this.lastCacheTime = 0; // Ensures first listCatalog fetches from Notion if configured
+    this.lastCacheTime = 0; // Ensures first listCatalog fetches live from Notion
   }
 
   /**
-   * Retrieves all catalog items. Uses in-memory cache if valid (<5 mins),
-   * else queries Notion Inventory DB if configured.
+   * Retrieves all catalog items. Queries live Notion Inventory DB and caches for 30s.
+   * If forceRefresh is true, bypasses in-memory cache and re-queries Notion immediately.
    */
   public async listCatalog(forceRefresh = false): Promise<InventoryItem[]> {
     const isCacheValid = !forceRefresh && Date.now() - this.lastCacheTime < this.CACHE_TTL_MS;
@@ -372,7 +370,7 @@ export class InventoryService {
     } else {
       this.catalogCache.push(newItem);
     }
-    this.lastCacheTime = Date.now();
+    this.lastCacheTime = 0; // Force refresh
 
     // Log to Notion Sales Logs
     if (this.notionClient && this.salesLogsDbId) {
@@ -567,7 +565,65 @@ export class InventoryService {
     targetItem.status =
       newQuantity === 0 ? "Out of Stock" : newQuantity <= 2 ? "Low Stock" : "In Stock";
 
-    // Update in-memory cache
+    // 1. Resolve live Notion page ID if missing or synthetic
+    let notionPageId =
+      targetItem.id && !targetItem.id.startsWith("seed-") && !targetItem.id.startsWith("item-")
+        ? targetItem.id
+        : null;
+
+    if (!notionPageId && this.notionClient && this.inventoryDbId) {
+      try {
+        const queryRes = (await this.notionClient.queryDatabase(this.inventoryDbId, {
+          filter: {
+            or: [
+              { property: "Item Code", rich_text: { equals: itemCode } },
+              { property: "Product Name", title: { contains: itemCode } },
+            ],
+          },
+        })) as { results: any[] };
+
+        if (queryRes?.results && queryRes.results.length > 0) {
+          notionPageId = queryRes.results[0].id;
+          targetItem.id = notionPageId;
+        }
+      } catch (findErr: any) {
+        console.warn(`Could not resolve Notion page for ${itemCode}:`, findErr.message);
+      }
+    }
+
+    // 2. Persist to Notion DB page if available
+    if (this.notionClient && notionPageId) {
+      try {
+        await this.notionClient.updatePage({
+          page_id: notionPageId,
+          properties: {
+            "Quantity in Stock": { number: newQuantity },
+            "Status": { select: { name: targetItem.status } },
+          },
+        });
+      } catch (err: any) {
+        console.error(`Failed to update Notion page for ${itemCode}:`, err.message);
+        throw new Error(`Failed to update Notion stock for ${itemCode}: ${err.message}`);
+      }
+    } else if (this.notionClient && this.inventoryDbId) {
+      try {
+        const newPage = await this.notionClient.createPage({
+          parent: { database_id: this.inventoryDbId },
+          properties: {
+            "Product Name": { title: [{ text: { content: targetItem.productName } }] },
+            "Item Code": { rich_text: [{ text: { content: targetItem.itemCode } }] },
+            "Price": { number: targetItem.unitPrice },
+            "Quantity in Stock": { number: newQuantity },
+            "Status": { select: { name: targetItem.status } },
+          },
+        });
+        if (newPage?.id) targetItem.id = newPage.id;
+      } catch (createErr: any) {
+        console.error(`Failed to create Notion page for ${itemCode}:`, createErr.message);
+      }
+    }
+
+    // Update in-memory cache and invalidate TTL so subsequent listCatalog queries live
     const existingIdx = this.catalogCache.findIndex(
       (c) => c.itemCode.toLowerCase() === itemCode.toLowerCase()
     );
@@ -576,22 +632,7 @@ export class InventoryService {
     } else {
       this.catalogCache.push({ ...targetItem });
     }
-    this.lastCacheTime = Date.now();
-
-    // Persist to Notion DB page if available
-    if (this.notionClient && targetItem.id && !targetItem.id.startsWith("seed-")) {
-      try {
-        await this.notionClient.updatePage({
-          page_id: targetItem.id,
-          properties: {
-            "Quantity in Stock": { number: newQuantity },
-            "Status": { select: { name: targetItem.status } },
-          },
-        });
-      } catch (err: any) {
-        console.warn(`Could not update Notion page for ${itemCode}:`, err.message);
-      }
-    }
+    this.lastCacheTime = 0; // Ensures next read queries fresh from Notion
 
     // Record audit entry in Notion Sales Logs
     if (this.notionClient && this.salesLogsDbId) {
